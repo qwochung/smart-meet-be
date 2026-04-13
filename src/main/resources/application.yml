@@ -1,17 +1,17 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/smart_meet
-    username: admin
-    password: 111
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
   jpa:
     hibernate:
-      ddl-auto: update 
+      ddl-auto: update
     properties:
       hibernate:
-        format_sql: true
-    database-platform: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone: Asia/Ho_Chi_Minh
   
 logging:
   level:
