@@ -22,7 +22,7 @@ public class RoomController {
         return ResponseEntity.ok(roomService.createRoom(roomRequest));
     }
     
-    @GetMapping("/{code}")
+    @GetMapping("/{code}/available")
     public ResponseEntity<RoomResponse> getRoom(@PathVariable String code){
         return ResponseEntity.ok(roomService.getRoomByCode(code));
     }

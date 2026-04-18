@@ -55,7 +55,7 @@ public class RoomService {
     }
 
     public RoomResponse getRoomByCode(String code) {
-        Room room = roomRepository.findByRoomCode(code)
+        Room room = roomRepository.findByRoomCodeAndStatus(code, RoomStatus.ACTIVE)
                 .orElseThrow(() -> new RuntimeException("Room not found"));
         return roomMapper.toResponse(room);
     }
