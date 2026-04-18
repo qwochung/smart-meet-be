@@ -1,11 +1,15 @@
 package com.example.smartmeetbe.exception;
 
 import com.example.smartmeetbe.dto.response.ApiResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -20,9 +24,9 @@ public class GlobalExceptionHandler {
                         .build());
     }
 
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse<?>> handleValidation(MethodArgumentNotValidException ex) {
-
         String message = ex.getBindingResult()
                 .getFieldErrors()
                 .stream()
@@ -37,9 +41,32 @@ public class GlobalExceptionHandler {
                         .data(null)
                         .build());
     }
-    
+
+
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ApiResponse<?>> handleAuthException(AuthenticationException ex) {
+        return ResponseEntity.status(401)
+                .body(ApiResponse.builder()
+                        .success(false)
+                        .message("Unauthorized: " + ex.getMessage())
+                        .data(null)
+                        .build());
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiResponse<?>> handleAccessDenied(AccessDeniedException ex) {
+        return ResponseEntity.status(403)
+                .body(ApiResponse.builder()
+                        .success(false)
+                        .message("Forbidden: " + ex.getMessage())
+                        .data(null)
+                        .build());
+    }
+
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<?>> handleException(Exception ex) {
+        log.error("Unhandled exception: {}", ex.getMessage(), ex);
         return ResponseEntity.internalServerError()
                 .body(ApiResponse.builder()
                         .success(false)

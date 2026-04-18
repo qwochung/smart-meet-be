@@ -5,14 +5,35 @@ spring:
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
   jpa:
     hibernate:
       ddl-auto: update
+    show-sql: false
     properties:
       hibernate:
         jdbc:
           time_zone: Asia/Ho_Chi_Minh
-  
+        format_sql: false
+
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+    expiration-ms: 900000           # 15 minutes
+    refresh-expiration-ms: 604800000 # 7 days
+  frontend-url: http://localhost:3000
+
 logging:
   level:
     org.hibernate: ERROR
