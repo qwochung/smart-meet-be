@@ -32,7 +32,7 @@ app:
     secret: ${JWT_SECRET}
     expiration-ms: 900000           # 15 minutes
     refresh-expiration-ms: 604800000 # 7 days
-  frontend-url: http://localhost:3000
+  client-url: http://localhost:5000
 
 logging:
   level:
