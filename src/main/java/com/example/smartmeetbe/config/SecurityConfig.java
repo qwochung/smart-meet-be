@@ -1,5 +1,7 @@
-package com.example.smartmeetbe.security;
+package com.example.smartmeetbe.config;
 
+import com.example.smartmeetbe.security.JwtAuthenticationFilter;
+import com.example.smartmeetbe.security.UserDetailsServiceImpl;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -32,10 +34,7 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final UserDetailsServiceImpl userDetailsService;
-
-    @Value("${CLIENT_URL:http://localhost:3000}")
-    private String clientUrl;
-
+    
     private static final String[] PUBLIC_POST_ENDPOINTS = {
             "/auth/register",
             "/auth/login",
@@ -58,6 +57,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, PUBLIC_POST_ENDPOINTS).permitAll()
                         .requestMatchers(HttpMethod.GET, PUBLIC_GET_ENDPOINTS).permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers("/ws/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())

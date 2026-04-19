@@ -18,8 +18,8 @@ public class EmailServiceImpl implements EmailService {
 
     private final JavaMailSender mailSender;
 
-    @Value("${app.frontend-url}")
-    private String frontendUrl;
+    @Value("${app.client-url}")
+    private String clientUrl;
 
     @Value("${spring.mail.username}")
     private String fromEmail;
@@ -27,7 +27,7 @@ public class EmailServiceImpl implements EmailService {
     @Async
     @Override
     public void sendVerificationEmail(String to, String token) {
-        String link = frontendUrl + "/auth/verify-email?token=" + token;
+        String link = clientUrl + "/auth/verify-email?token=" + token;
         String subject = "SmartMeet – Verify your email";
         String body = buildVerificationHtml(link);
         sendHtmlEmail(to, subject, body);
@@ -37,7 +37,7 @@ public class EmailServiceImpl implements EmailService {
     @Async
     @Override
     public void sendPasswordResetEmail(String to, String token) {
-        String link = frontendUrl + "/auth/reset-password?token=" + token;
+        String link = clientUrl + "/auth/reset-password?token=" + token;
         String subject = "SmartMeet – Reset your password";
         String body = buildPasswordResetHtml(link);
         sendHtmlEmail(to, subject, body);
