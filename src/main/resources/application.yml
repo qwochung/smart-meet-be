@@ -30,8 +30,8 @@ spring:
 app:
   jwt:
     secret: ${JWT_SECRET}
-    expiration-ms: 900000           # 15 minutes
-    refresh-expiration-ms: 604800000 # 7 days
+    expiration-ms: 90000000           # 15 minutes
+    refresh-expiration-ms: 60480000000 # 7 days
   client-url: http://localhost:5000
 
 logging:
