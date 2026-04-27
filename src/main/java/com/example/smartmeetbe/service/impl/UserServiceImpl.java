@@ -78,6 +78,7 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
     }
 
+    // TODO: Move this to UserMapper
     private UserResponse toResponse(User user) {
         return UserResponse.builder()
                 .id(user.getId())
