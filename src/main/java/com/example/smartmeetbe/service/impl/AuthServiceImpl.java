@@ -185,6 +185,8 @@ public class AuthServiceImpl implements AuthService {
                 .avatar(user.getAvatar())
                 .role(user.getRole())
                 .enabled(user.isEnabled())
+                .createdAt(user.getCreatedAt())
+                .updatedAt(user.getUpdatedAt())
                 .build();
 
         return AuthResponse.builder()

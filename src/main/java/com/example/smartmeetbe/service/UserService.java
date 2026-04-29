@@ -12,4 +12,5 @@ public interface UserService {
     void changePassword(String email, ChangePasswordRequest request);
     UserResponse createUser(UserRequest user);
     User findById(Long id);
+    User findByEmail(String email);
 }
