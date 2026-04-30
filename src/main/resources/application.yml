@@ -5,6 +5,15 @@ spring:
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      username: ${REDIS_USERNAME}
+      password: ${REDIS_PASSWORD}
+      ssl:
+        enabled: false
+
   mail:
     host: smtp.gmail.com
     port: 587
@@ -33,6 +42,15 @@ app:
     expiration-ms: 90000000           # 15 minutes
     refresh-expiration-ms: 60480000000 # 7 days
   client-url: http://localhost:5000
+  room:
+    max-participants: 10
+    max-active-rooms: 5
+    duration-minutes: 60
+
+livekit:
+  api-key: ${LIVEKIT_API_KEY}
+  api-secret: ${LIVEKIT_API_SECRET}
+  host: ${LIVEKIT_URL}
 
 logging:
   level:

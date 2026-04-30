@@ -1,37 +1,87 @@
 package com.example.smartmeetbe.controller;
 
+import com.example.smartmeetbe.dto.request.AcceptRejectRequest;
+import com.example.smartmeetbe.dto.request.JoinRoomRequest;
 import com.example.smartmeetbe.dto.request.RoomRequest;
+import com.example.smartmeetbe.dto.response.ApiResponse;
+import com.example.smartmeetbe.dto.response.JoinRoomResponse;
 import com.example.smartmeetbe.dto.response.RoomResponse;
 import com.example.smartmeetbe.service.JoinRoomService;
-import com.example.smartmeetbe.service.impl.RoomServiceImpl;
+import com.example.smartmeetbe.service.RoomService;
 import com.example.smartmeetbe.utils.SecurityUtil;
+import jakarta.validation.Valid;
 import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/rooms")
-@FieldDefaults(level = AccessLevel.PRIVATE)
-@AllArgsConstructor
+@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
+@RequiredArgsConstructor
 public class RoomController {
-    RoomServiceImpl roomServiceImpl;
+
+    RoomService roomService;
     JoinRoomService joinRoomService;
 
     @PostMapping("/")
-    public ResponseEntity<RoomResponse> createRoom(@RequestBody RoomRequest roomRequest) {
+    public ResponseEntity<ApiResponse<RoomResponse>> createRoom(@Valid @RequestBody RoomRequest roomRequest) {
         String hostEmail = SecurityUtil.getCurrentUser();
-        return ResponseEntity.ok(roomServiceImpl.createRoom(roomRequest, hostEmail));
+        RoomResponse room = roomService.createRoom(roomRequest, hostEmail);
+        return ResponseEntity.ok(ApiResponse.<RoomResponse>builder()
+                .success(true)
+                .message("Room created successfully")
+                .data(room)
+                .build());
     }
 
     @GetMapping("/{code}/available")
-    public ResponseEntity<RoomResponse> getRoom(@PathVariable String code) {
-        return ResponseEntity.ok(roomServiceImpl.getRoomByCode(code));
+    public ResponseEntity<ApiResponse<RoomResponse>> getRoom(@PathVariable String code) {
+        RoomResponse room = roomService.getRoomByCode(code);
+        return ResponseEntity.ok(ApiResponse.<RoomResponse>builder()
+                .success(true)
+                .message("Room retrieved successfully")
+                .data(room)
+                .build());
     }
 
-    @PostMapping("/{code}/user/accept")
-    public void acceptRoom(@PathVariable String code, @RequestBody Long userId) {
-        joinRoomService.acceptJoinRoom(code, userId);
+    @PostMapping("/{code}/join")
+    public ResponseEntity<ApiResponse<JoinRoomResponse>> joinRoom(
+            @PathVariable String code,
+            @RequestBody(required = false) JoinRoomRequest body) {
+        String userEmail = SecurityUtil.getCurrentUser();
+        JoinRoomRequest request = body != null ? body : new JoinRoomRequest();
+        request.setRoomCode(code);
+        JoinRoomResponse response = joinRoomService.joinRoom(request, userEmail);
+        return ResponseEntity.ok(ApiResponse.<JoinRoomResponse>builder()
+                .success(true)
+                .message("Join request processed successfully")
+                .data(response)
+                .build());
+    }
+
+    @PostMapping("/{code}/join/accept")
+    public ResponseEntity<ApiResponse<Void>> acceptJoin(
+            @PathVariable String code,
+            @Valid @RequestBody AcceptRejectRequest request) {
+        String hostEmail = SecurityUtil.getCurrentUser();
+        joinRoomService.acceptJoin(code, request, hostEmail);
+        return ResponseEntity.ok(ApiResponse.<Void>builder()
+                .success(true)
+                .message("User accepted successfully")
+                .build());
+    }
+
+    @PostMapping("/{code}/join/reject")
+    public ResponseEntity<ApiResponse<Void>> rejectJoin(
+            @PathVariable String code,
+            @Valid @RequestBody AcceptRejectRequest request) {
+        String hostEmail = SecurityUtil.getCurrentUser();
+        joinRoomService.rejectJoin(code, request, hostEmail);
+        return ResponseEntity.ok(ApiResponse.<Void>builder()
+                .success(true)
+                .message("User rejected successfully")
+                .build());
     }
 }

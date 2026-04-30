@@ -1,6 +1,11 @@
 package com.example.smartmeetbe.service;
 
-public interface JoinRoomService {
-    void acceptJoinRoom(String code, Long userId);
+import com.example.smartmeetbe.dto.request.AcceptRejectRequest;
+import com.example.smartmeetbe.dto.response.JoinRoomResponse;
+import com.example.smartmeetbe.dto.request.JoinRoomRequest;
 
+public interface JoinRoomService {
+    JoinRoomResponse joinRoom(JoinRoomRequest request, String userEmail);
+    void acceptJoin(String roomCode, AcceptRejectRequest request, String hostEmail);
+    void rejectJoin(String roomCode, AcceptRejectRequest request, String hostEmail);
 }
