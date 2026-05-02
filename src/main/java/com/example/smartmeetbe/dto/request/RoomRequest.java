@@ -8,6 +8,5 @@ import java.time.LocalDateTime;
 public class RoomRequest {
     String name;
     String description;
-    Long hostId;
     LocalDateTime scheduledAt;
 }

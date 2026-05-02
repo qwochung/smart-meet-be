@@ -2,9 +2,7 @@ package com.example.smartmeetbe.entity;
 
 import com.example.smartmeetbe.constant.RoomStatus;
 import jakarta.persistence.*;
-import lombok.AccessLevel;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.*;
 import lombok.experimental.FieldDefaults;
 
 import java.time.LocalDateTime;
@@ -14,6 +12,9 @@ import java.util.List;
 @Table(name = "rooms")
 @Getter
 @Setter
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class Room extends BaseEntity {
     @Id
@@ -45,5 +46,5 @@ public class Room extends BaseEntity {
     )
     List<User> participants;
     LocalDateTime scheduledAt;
-
+    LocalDateTime expiresAt;
 }

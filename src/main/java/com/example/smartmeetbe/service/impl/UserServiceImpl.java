@@ -25,34 +25,29 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public UserResponse getProfile(String email) {
-        User user = findByEmail(email);
-        return toResponse(user);
+        return userMapper.toResponse(findByEmail(email));
     }
 
     @Override
     @Transactional
     public UserResponse updateProfile(String email, UpdateProfileRequest request) {
         User user = findByEmail(email);
-
         if (request.getName() != null && !request.getName().isBlank()) {
             user.setName(request.getName());
         }
         if (request.getAvatar() != null) {
             user.setAvatar(request.getAvatar());
         }
-
-        return toResponse(userRepository.save(user));
+        return userMapper.toResponse(userRepository.save(user));
     }
 
     @Override
     @Transactional
     public void changePassword(String email, ChangePasswordRequest request) {
         User user = findByEmail(email);
-
         if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
             throw new AppException(ErrorCode.WRONG_PASSWORD);
         }
-
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
     }
@@ -63,8 +58,7 @@ public class UserServiceImpl implements UserService {
         if (userRepository.existsByEmail(user.getEmail())) {
             throw new AppException(ErrorCode.EMAIL_ALREADY_EXISTS);
         }
-        User entity = userMapper.toUser(user);
-        return userMapper.toResponse(userRepository.save(entity));
+        return userMapper.toResponse(userRepository.save(userMapper.toUser(user)));
     }
 
     @Override
@@ -73,22 +67,9 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
     }
 
-    private User findByEmail(String email) {
+    @Override
+    public User findByEmail(String email) {
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
-    }
-
-    // TODO: Move this to UserMapper
-    private UserResponse toResponse(User user) {
-        return UserResponse.builder()
-                .id(user.getId())
-                .name(user.getName())
-                .email(user.getEmail())
-                .avatar(user.getAvatar())
-                .role(user.getRole())
-                .enabled(user.isEnabled())
-                .createdAt(user.getCreatedAt())
-                .updatedAt(user.getUpdatedAt())
-                .build();
     }
 }

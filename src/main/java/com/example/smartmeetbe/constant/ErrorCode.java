@@ -21,7 +21,15 @@ public enum ErrorCode {
     USER_NOT_FOUND("User not found", HttpStatus.NOT_FOUND),
     WRONG_PASSWORD("Current password is incorrect", HttpStatus.BAD_REQUEST),
 
+    // Room
+    ROOM_NOT_FOUND("Room not found or not active", HttpStatus.NOT_FOUND),
+    ROOM_FULL("Room has reached maximum participants (10)", HttpStatus.CONFLICT),
+    ROOM_EXPIRED("Room has expired", HttpStatus.GONE),
+    ROOM_JOIN_CONFLICT("Too many concurrent join requests, please retry", HttpStatus.CONFLICT),
+    MAX_ACTIVE_ROOMS_REACHED("Maximum number of active rooms (5) reached", HttpStatus.CONFLICT),
+
     // General
+    FORBIDDEN("You do not have permission to perform this action", HttpStatus.FORBIDDEN),
     INVALID_REQUEST("Invalid request", HttpStatus.BAD_REQUEST),
     INTERNAL_ERROR("Internal server error", HttpStatus.INTERNAL_SERVER_ERROR);
 
