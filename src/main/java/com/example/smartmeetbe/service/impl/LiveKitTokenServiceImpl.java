@@ -1,6 +1,5 @@
 package com.example.smartmeetbe.service.impl;
 
-
 import com.example.smartmeetbe.config.LiveKitConfig;
 import com.example.smartmeetbe.constant.Role;
 import com.example.smartmeetbe.service.LiveKitTokenService;
@@ -20,21 +19,16 @@ public class LiveKitTokenServiceImpl implements LiveKitTokenService {
     @Value("${app.room.duration-minutes:60}")
     private int durationMinutes;
 
-    /**
-     * Generate LiveKit JWT token cho user tham gia phòng.
-     *
-     * @param identity  email — định danh duy nhất trong room
-     * @param roomName  roomCode, dùng làm room name trên LiveKit
-     * @param role      HOST hoặc PARTICIPANT
-     */
-    public String generateToken(String identity, String roomName, Role role) {
+    @Override
+    public String generateToken(String identity, String displayName, String roomName, Role role) {
         AccessToken token = new AccessToken(
                 liveKitConfig.getApiKey(),
                 liveKitConfig.getApiSecret()
         );
 
         token.setIdentity(identity);
-        token.setName(identity);
+        // Use the real display name so the FE can show it in participant tiles
+        token.setName(displayName != null && !displayName.isBlank() ? displayName : identity);
         token.setTtl(TimeUnit.MINUTES.toMillis(durationMinutes));
         token.addGrants(buildGrants(roomName, role));
 

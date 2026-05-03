@@ -41,9 +41,8 @@ public class JoinRoomServiceImpl implements JoinRoomService {
     private final RoomRepository roomRepository;
     private final LiveKitTokenService liveKitTokenService;
     private final LiveKitConfig liveKitConfig;
-    // Redis key prefix để track số participant đang trong phòng
+
     private static final String ROOM_PARTICIPANT_KEY = "room:participants:";
-    // Redis key để lock khi join (tránh race condition)
     private static final String ROOM_JOIN_LOCK_KEY = "room:join:lock:";
     private final StringRedisTemplate redisTemplate;
 
@@ -71,11 +70,9 @@ public class JoinRoomServiceImpl implements JoinRoomService {
         boolean isHost = room.getHostUser().getId().equals(user.getId());
 
         if (isHost) {
-            // Host vào thẳng, không cần duyệt
             return buildTokenResponse(room, user, Role.HOST);
         }
 
-        // Participant → lưu PENDING, notify host
         enforceMaxParticipants(room.getRoomCode());
 
         JoinRoom joinRoom = joinRoomRepository
@@ -86,11 +83,9 @@ public class JoinRoomServiceImpl implements JoinRoomService {
                         .role(Role.PARTICIPANT)
                         .build());
 
-        // Reset về PENDING nếu đang là trạng thái cũ
         joinRoom.setStatus(JoinRoomStatus.PENDING);
         joinRoomRepository.save(joinRoom);
 
-        // Notify host có người xin vào
         notifyHost(room.getRoomCode(), "JOIN_REQUEST", Map.of(
                 "userId",   user.getId(),
                 "userName", user.getName(),
@@ -100,7 +95,6 @@ public class JoinRoomServiceImpl implements JoinRoomService {
 
         log.info("Join request PENDING: user={} room={}", userEmail, room.getRoomCode());
 
-        // Trả pending = true, FE hiển thị màn hình "Đang chờ host duyệt"
         return JoinRoomResponse.builder()
                 .pending(true)
                 .roomCode(room.getRoomCode())
@@ -126,20 +120,20 @@ public class JoinRoomServiceImpl implements JoinRoomService {
         joinRoom.setStatus(JoinRoomStatus.APPROVED);
         joinRoomRepository.save(joinRoom);
 
-        // Generate LiveKit token cho participant
+        // Pass the real display name so the LiveKit token carries it
         String livekitToken = liveKitTokenService.generateToken(
                 participant.getEmail(),
+                participant.getName(),   // <-- displayName fix
                 roomCode,
                 Role.PARTICIPANT
         );
 
-        // Gửi token tới participant qua WebSocket
-        // FE participant đang subscribe kênh này và chờ
         notifyParticipant(roomCode, participant.getId(), "JOIN_APPROVED", Map.of(
                 "livekitToken", livekitToken,
                 "livekitHost", liveKitConfig.getHost(),
                 "roomCode", roomCode,
-                "roomName", room.getName()
+                "roomName", room.getName(),
+                "userName", participant.getName()   // <-- also send name in WS payload
         ));
 
         log.info("Host {} accepted user {} into room {}", hostEmail, participant.getEmail(), roomCode);
@@ -163,10 +157,8 @@ public class JoinRoomServiceImpl implements JoinRoomService {
         joinRoom.setStatus(JoinRoomStatus.REJECTED);
         joinRoomRepository.save(joinRoom);
 
-        // Rollback Redis counter vì participant không được vào
         redisTemplate.opsForValue().decrement(ROOM_PARTICIPANT_KEY + roomCode);
 
-        // Notify participant bị từ chối
         notifyParticipant(roomCode, participant.getId(), "JOIN_REJECTED", Map.of(
                 "reason", "Host has rejected your request"
         ));
@@ -178,7 +170,6 @@ public class JoinRoomServiceImpl implements JoinRoomService {
         String countKey = ROOM_PARTICIPANT_KEY + roomCode;
         String lockKey = ROOM_JOIN_LOCK_KEY + roomCode;
 
-        // Set lock 5 giây
         Boolean locked = redisTemplate.opsForValue()
                 .setIfAbsent(lockKey, "1", Duration.ofSeconds(5));
 
@@ -189,7 +180,6 @@ public class JoinRoomServiceImpl implements JoinRoomService {
         try {
             Long current = redisTemplate.opsForValue().increment(countKey);
             if (current == null || current > maxParticipants) {
-                // Rollback counter
                 redisTemplate.opsForValue().decrement(countKey);
                 throw new AppException(ErrorCode.ROOM_FULL);
             }
@@ -230,7 +220,12 @@ public class JoinRoomServiceImpl implements JoinRoomService {
     }
 
     private JoinRoomResponse buildTokenResponse(Room room, User user, Role role) {
-        String token = liveKitTokenService.generateToken(user.getEmail(), room.getRoomCode(), role);
+        String token = liveKitTokenService.generateToken(
+                user.getEmail(),
+                user.getName(),
+                room.getRoomCode(),
+                role
+        );
         return JoinRoomResponse.builder()
                 .pending(false)
                 .livekitToken(token)
@@ -240,5 +235,4 @@ public class JoinRoomServiceImpl implements JoinRoomService {
                 .role(Role.valueOf(role.name()))
                 .build();
     }
-
 }
