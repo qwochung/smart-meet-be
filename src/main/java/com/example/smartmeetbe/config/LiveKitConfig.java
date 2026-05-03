@@ -23,5 +23,11 @@ public class LiveKitConfig {
     public RoomServiceClient roomServiceClient() {
         return RoomServiceClient.create(host, apiKey, apiSecret);
     }
+
+    public String getWebSocketHost() {
+        return host.replace("https://", "wss://")
+                .replace("http://", "ws://");
+    }
+
 }
 
