@@ -19,7 +19,6 @@ import com.example.smartmeetbe.service.RoomService;
 import com.example.smartmeetbe.service.UserService;
 import com.example.smartmeetbe.utils.RoomCodeGenerator;
 import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -97,7 +96,18 @@ public class RoomServiceImpl implements RoomService {
         redisTemplate.opsForValue().set(redisKey, "1", durationMinutes, TimeUnit.MINUTES);
 
         log.info("Room created: {} by host: {}", room.getRoomCode(), hostEmail);
-        return roomMapper.toResponse(room);
+
+        String livekitToken = liveKitTokenService.generateToken(
+                host.getEmail(),
+                host.getName(),
+                room.getRoomCode(),
+                Role.HOST
+        );
+
+        var response = roomMapper.toResponse(room);
+        response.setLivekitToken(livekitToken);
+        response.setLivekitHost(liveKitConfig.getHost());
+        return response;
     }
 
     private String generateUniqueRoomCode() {
