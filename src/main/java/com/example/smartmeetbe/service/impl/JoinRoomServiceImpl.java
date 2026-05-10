@@ -102,6 +102,7 @@ public class JoinRoomServiceImpl implements JoinRoomService {
                 .build();
     }
 
+    @Transactional
     @Override
     public void acceptJoin(String roomCode, AcceptRejectRequest request, String hostEmail) {
         Room room = getActiveRoom(roomCode);
@@ -139,6 +140,7 @@ public class JoinRoomServiceImpl implements JoinRoomService {
         log.info("Host {} accepted user {} into room {}", hostEmail, participant.getEmail(), roomCode);
     }
 
+    @Transactional
     @Override
     public void rejectJoin(String roomCode, AcceptRejectRequest request, String hostEmail) {
         Room room = getActiveRoom(roomCode);

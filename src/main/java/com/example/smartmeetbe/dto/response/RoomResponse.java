@@ -15,4 +15,6 @@ public class RoomResponse {
     LocalDateTime scheduledAt;
     LocalDateTime createdAt;
     LocalDateTime updatedAt;
+    String livekitToken;
+    String livekitHost;
 }
