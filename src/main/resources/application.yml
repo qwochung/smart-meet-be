@@ -46,6 +46,21 @@ app:
     max-participants: 10
     max-active-rooms: 5
     duration-minutes: 60
+  storage:
+    provider: s3                   # s3 | local
+
+    s3:
+      bucket-name: ${S3_BUCKET}         # tên bucket, khai báo trong .env
+      region: ${S3_REGION:ap-southeast-1}   # Singapore (gần Việt Nam)
+      access-key: ${S3_ACCESS_KEY}
+      secret-key: ${S3_SECRET_KEY}
+      prefix: rooms                # folder prefix trong bucket: rooms/{roomCode}/...
+      presign-expiry-minutes: 15   # presigned URL hết hạn sau 15 phút
+
+    upload:
+      max-files-per-room: 5
+      max-file-size-mb: 50
+
 
 livekit:
   api-key: ${LIVEKIT_API_KEY}
