@@ -45,6 +45,10 @@ public class Room extends BaseEntity {
         inverseJoinColumns = @JoinColumn(name = "user_id")
     )
     List<User> participants;
+    
+    @OneToMany(mappedBy = "room", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+    List<Document> documents;
+    
     LocalDateTime scheduledAt;
     LocalDateTime expiresAt;
 }
