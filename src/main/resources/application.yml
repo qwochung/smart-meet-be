@@ -42,6 +42,7 @@ app:
     expiration-ms: 90000000           # 15 minutes
     refresh-expiration-ms: 60480000000 # 7 days
   client-url: http://localhost:5000
+#  client-url: http://localhost:63342  => Nếu test bằng html thì tắt cái dòng có port 5000, mở dòng này ra
   room:
     max-participants: 10
     max-active-rooms: 5
@@ -66,6 +67,9 @@ livekit:
   api-key: ${LIVEKIT_API_KEY}
   api-secret: ${LIVEKIT_API_SECRET}
   host: ${LIVEKIT_URL}
+
+ai-server:
+  transcribe-url: http://localhost:8000/api/transcribe/chunk
 
 logging:
   level:
