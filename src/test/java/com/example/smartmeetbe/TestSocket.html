@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SmartMeet STOMP Mic Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7.0.0/bundles/stomp.umd.min.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 24px;
+            background: #f5f5f5;
+            color: #222;
+        }
+        .container {
+            max-width: 920px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+        }
+        h1 { margin-top: 0; }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        textarea { min-height: 90px; resize: vertical; }
+        .full { grid-column: 1 / -1; }
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        button {
+            padding: 10px 14px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            background: #222;
+            color: white;
+        }
+        button:disabled {
+            background: #999;
+            cursor: not-allowed;
+        }
+        .secondary { background: #555; }
+        .danger { background: #b00020; }
+        .status {
+            padding: 10px 12px;
+            border-radius: 8px;
+            background: #eee;
+            margin-bottom: 16px;
+            font-weight: 600;
+        }
+        pre {
+            background: #111;
+            color: #eee;
+            padding: 12px;
+            border-radius: 8px;
+            overflow: auto;
+            max-height: 320px;
+            font-size: 13px;
+        }
+        .hint {
+            font-size: 13px;
+            color: #666;
+            margin-top: 6px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>SmartMeet STOMP Mic Test</h1>
+
+    <div id="status" class="status">Status: idle</div>
+
+    <div class="grid">
+        <div class="full">
+            <label>WebSocket URL</label>
+            <input id="wsUrl" value="ws://localhost:8080/api/ws/meet" />
+            <div class="hint">Không cần gắn token vào URL, trang này sẽ tự append ?token=...</div>
+        </div>
+
+        <div class="full">
+            <label>JWT Token</label>
+            <textarea id="token" placeholder="Paste JWT token here"></textarea>
+        </div>
+
+        <div>
+            <label>Room ID</label>
+            <input id="roomId" value="sj4-rxus-efy" />
+        </div>
+
+        <div>
+            <label>User / Participant ID</label>
+            <input id="participantId" value="6" />
+        </div>
+
+        <div>
+            <label>User / Participant Name</label>
+            <input id="participantName" value="Alice" />
+        </div>
+
+        <div>
+            <label>Sample Rate</label>
+            <input id="sampleRate" type="number" value="16000" />
+            <div class="hint">Browser có thể thu native 44100/48000Hz, code sẽ resample về giá trị này.</div>
+        </div>
+    </div>
+
+    <div class="actions">
+        <button id="connectBtn">Connect STOMP</button>
+        <button id="disconnectBtn" class="secondary" disabled>Disconnect</button>
+        <button id="startBtn" disabled>Start Recording</button>
+        <button id="stopBtn" class="danger" disabled>Stop Recording</button>
+        <button id="sendBtn" disabled>Send Audio</button>
+        <button id="clearBtn" class="secondary">Clear Log</button>
+    </div>
+
+    <h3>Last Payload</h3>
+    <textarea id="payloadPreview" readonly></textarea>
+
+    <h3>Transcript / Logs</h3>
+    <pre id="log"></pre>
+</div>
+
+<script>
+    let stompClient = null;
+    let subscription = null;
+
+    let mediaStream = null;
+    let audioContext = null;
+    let sourceNode = null;
+    let processorNode = null;
+
+    let recordedChunks = [];
+    let recordingStartTime = 0;
+    let chunkIndex = 0;
+    let lastAudioBase64 = null;
+    let lastDurationMs = 0;
+
+    const $ = id => document.getElementById(id);
+
+    const statusEl = $('status');
+    const logEl = $('log');
+    const payloadPreviewEl = $('payloadPreview');
+
+    function setStatus(text) {
+        statusEl.textContent = `Status: ${text}`;
+    }
+
+    function log(...args) {
+        const line = args.map(v => typeof v === 'string' ? v : JSON.stringify(v, null, 2)).join(' ');
+        logEl.textContent += `[${new Date().toLocaleTimeString()}] ${line}\n`;
+        logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function getConfig() {
+        const wsUrl = $('wsUrl').value.trim();
+        const token = $('token').value.trim();
+        const roomId = $('roomId').value.trim();
+        const participantId = $('participantId').value.trim();
+        const participantName = $('participantName').value.trim();
+        const sampleRate = Number($('sampleRate').value || 16000);
+
+        if (!wsUrl) throw new Error('Missing WebSocket URL');
+        if (!token) throw new Error('Missing JWT token');
+        if (!roomId) throw new Error('Missing roomId');
+        if (!participantId) throw new Error('Missing participantId');
+        if (!participantName) throw new Error('Missing participantName');
+
+        return { wsUrl, token, roomId, participantId, participantName, sampleRate };
+    }
+
+    function buildBrokerUrl(wsUrl, token) {
+        const separator = wsUrl.includes('?') ? '&' : '?';
+        return `${wsUrl}${separator}token=${encodeURIComponent(token)}`;
+    }
+
+    function connectStomp() {
+        try {
+            const { wsUrl, token, roomId } = getConfig();
+            const brokerURL = buildBrokerUrl(wsUrl, token);
+
+            stompClient = new StompJs.Client({
+                brokerURL,
+                reconnectDelay: 5000,
+                debug: msg => log('STOMP:', msg),
+                onConnect: () => {
+                    setStatus('connected');
+                    log('Connected STOMP');
+
+                    $('connectBtn').disabled = true;
+                    $('disconnectBtn').disabled = false;
+                    $('startBtn').disabled = false;
+
+                    subscription = stompClient.subscribe(`/topic/rooms/${roomId}/transcript`, msg => {
+                        log('TRANSCRIPT:', msg.body);
+                    });
+
+                    log(`Subscribed: /topic/rooms/${roomId}/transcript`);
+                },
+                onStompError: frame => {
+                    setStatus('stomp error');
+                    log('STOMP ERROR:', frame.headers.message, frame.body);
+                },
+                onWebSocketError: error => {
+                    setStatus('websocket error');
+                    log('WebSocket error:', error);
+                },
+                onWebSocketClose: event => {
+                    setStatus(`closed code=${event.code}`);
+                    log('WebSocket closed:', { code: event.code, reason: event.reason });
+                    $('connectBtn').disabled = false;
+                    $('disconnectBtn').disabled = true;
+                    $('startBtn').disabled = true;
+                    $('stopBtn').disabled = true;
+                    $('sendBtn').disabled = !lastAudioBase64;
+                }
+            });
+
+            setStatus('connecting');
+            stompClient.activate();
+        } catch (e) {
+            log('Connect failed:', e.message);
+            setStatus('connect failed');
+        }
+    }
+
+    function disconnectStomp() {
+        if (subscription) {
+            subscription.unsubscribe();
+            subscription = null;
+        }
+        if (stompClient) {
+            stompClient.deactivate();
+            stompClient = null;
+        }
+        setStatus('disconnected');
+        $('connectBtn').disabled = false;
+        $('disconnectBtn').disabled = true;
+        $('startBtn').disabled = true;
+        $('stopBtn').disabled = true;
+    }
+
+    async function startRecording() {
+        try {
+            const { sampleRate } = getConfig();
+
+            mediaStream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
+            });
+
+            audioContext = new AudioContext();
+            sourceNode = audioContext.createMediaStreamSource(mediaStream);
+            processorNode = audioContext.createScriptProcessor(4096, 1, 1);
+
+            recordedChunks = [];
+            recordingStartTime = performance.now();
+
+            processorNode.onaudioprocess = event => {
+                const input = event.inputBuffer.getChannelData(0);
+                recordedChunks.push(new Float32Array(input));
+            };
+
+            sourceNode.connect(processorNode);
+            processorNode.connect(audioContext.destination);
+
+            lastAudioBase64 = null;
+            payloadPreviewEl.value = '';
+            $('sendBtn').disabled = true;
+            $('startBtn').disabled = true;
+            $('stopBtn').disabled = false;
+
+            setStatus(`recording -> target ${sampleRate}Hz`);
+            log('Recording started');
+        } catch (e) {
+            log('Start recording failed:', e.message);
+            setStatus('recording failed');
+        }
+    }
+
+    async function stopRecording() {
+        try {
+            lastDurationMs = Math.round(performance.now() - recordingStartTime);
+
+            if (processorNode) {
+                processorNode.disconnect();
+                processorNode.onaudioprocess = null;
+            }
+            if (sourceNode) sourceNode.disconnect();
+            if (mediaStream) mediaStream.getTracks().forEach(track => track.stop());
+            if (audioContext) await audioContext.close();
+
+            const { sampleRate } = getConfig();
+            const merged = mergeFloat32(recordedChunks);
+            const resampled = resampleLinear(merged, audioContext ? audioContext.sampleRate : 48000, sampleRate);
+            const wavBlob = encodeWavBlob(resampled, sampleRate);
+            lastAudioBase64 = await blobToBase64(wavBlob);
+
+            $('startBtn').disabled = false;
+            $('stopBtn').disabled = true;
+            $('sendBtn').disabled = false;
+
+            setStatus('recorded');
+            log(`Recording stopped. Duration=${lastDurationMs}ms, WAV bytes=${wavBlob.size}, base64 length=${lastAudioBase64.length}`);
+        } catch (e) {
+            log('Stop recording failed:', e.message);
+            setStatus('stop failed');
+        } finally {
+            mediaStream = null;
+            audioContext = null;
+            sourceNode = null;
+            processorNode = null;
+        }
+    }
+
+    function sendAudio() {
+        try {
+            if (!stompClient || !stompClient.connected) {
+                throw new Error('STOMP is not connected');
+            }
+            if (!lastAudioBase64) {
+                throw new Error('No recorded audio. Click Start/Stop Recording first.');
+            }
+
+            const { roomId, participantId, participantName, sampleRate } = getConfig();
+
+            const payload = {
+                roomId,
+                participantId,
+                participantName,
+                chunkIndex: chunkIndex++,
+                startTimeMs: 0,
+                endTimeMs: lastDurationMs,
+                sampleRate,
+                channels: 1,
+                audioDataBase64: lastAudioBase64
+            };
+
+            const destination = `/app/ws/rooms/${roomId}/audio`;
+            stompClient.publish({
+                destination,
+                body: JSON.stringify(payload)
+            });
+
+            payloadPreviewEl.value = JSON.stringify({
+                ...payload,
+                audioDataBase64: `${payload.audioDataBase64.slice(0, 80)}...`
+            }, null, 2);
+
+            log(`Sent audio to ${destination}`, {
+                roomId,
+                participantId,
+                participantName,
+                chunkIndex: payload.chunkIndex,
+                durationMs: lastDurationMs,
+                sampleRate,
+                base64Length: lastAudioBase64.length
+            });
+        } catch (e) {
+            log('Send failed:', e.message);
+        }
+    }
+
+    function mergeFloat32(chunks) {
+        const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+        const result = new Float32Array(totalLength);
+        let offset = 0;
+        for (const chunk of chunks) {
+            result.set(chunk, offset);
+            offset += chunk.length;
+        }
+        return result;
+    }
+
+    function resampleLinear(input, fromRate, toRate) {
+        if (fromRate === toRate) return input;
+
+        const ratio = fromRate / toRate;
+        const outputLength = Math.round(input.length / ratio);
+        const output = new Float32Array(outputLength);
+
+        for (let i = 0; i < outputLength; i++) {
+            const sourceIndex = i * ratio;
+            const index0 = Math.floor(sourceIndex);
+            const index1 = Math.min(index0 + 1, input.length - 1);
+            const fraction = sourceIndex - index0;
+            output[i] = input[index0] * (1 - fraction) + input[index1] * fraction;
+        }
+
+        return output;
+    }
+
+    function encodeWavBlob(samples, sampleRate) {
+        const bytesPerSample = 2;
+        const channels = 1;
+        const blockAlign = channels * bytesPerSample;
+        const byteRate = sampleRate * blockAlign;
+        const dataSize = samples.length * bytesPerSample;
+        const buffer = new ArrayBuffer(44 + dataSize);
+        const view = new DataView(buffer);
+
+        writeString(view, 0, 'RIFF');
+        view.setUint32(4, 36 + dataSize, true);
+        writeString(view, 8, 'WAVE');
+        writeString(view, 12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, channels, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, byteRate, true);
+        view.setUint16(32, blockAlign, true);
+        view.setUint16(34, 16, true);
+        writeString(view, 36, 'data');
+        view.setUint32(40, dataSize, true);
+
+        let offset = 44;
+        for (let i = 0; i < samples.length; i++, offset += 2) {
+            const s = Math.max(-1, Math.min(1, samples[i]));
+            view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+        }
+
+        return new Blob([view], { type: 'audio/wav' });
+    }
+
+    function writeString(view, offset, string) {
+        for (let i = 0; i < string.length; i++) {
+            view.setUint8(offset + i, string.charCodeAt(i));
+        }
+    }
+
+    function blobToBase64(blob) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const dataUrl = reader.result;
+                const base64 = String(dataUrl).split(',')[1];
+                resolve(base64);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+    }
+
+    $('connectBtn').addEventListener('click', connectStomp);
+    $('disconnectBtn').addEventListener('click', disconnectStomp);
+    $('startBtn').addEventListener('click', startRecording);
+    $('stopBtn').addEventListener('click', stopRecording);
+    $('sendBtn').addEventListener('click', sendAudio);
+    $('clearBtn').addEventListener('click', () => logEl.textContent = '');
+</script>
+</body>
+</html>
