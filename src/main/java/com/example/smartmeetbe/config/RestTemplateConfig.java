@@ -13,7 +13,7 @@ public class RestTemplateConfig {
     @Bean
     public RestTemplate aiRestTemplate(RestTemplateBuilder builder) {
         return builder
-                .setConnectTimeout(Duration.ofSeconds(10))
+                .setConnectTimeout(Duration.ofSeconds(30))
                 .setReadTimeout(Duration.ofSeconds(60))
                 .build();
     }

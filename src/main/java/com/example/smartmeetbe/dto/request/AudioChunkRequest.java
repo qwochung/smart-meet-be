@@ -13,4 +13,5 @@ public class AudioChunkRequest {
     private Integer sampleRate;
     private Integer channels;
     private String audioDataBase64;
+    private boolean isForceCut;
 }
