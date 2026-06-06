@@ -21,6 +21,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.time.Duration;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -38,19 +39,43 @@ public class AudioProcessingService {
     String transcribeUrl;
     
     @Async
-    public CompletableFuture<String> processAudio(String roomId, AudioChunkRequest payload) {
+    public CompletableFuture<Map<String, Object>> processAudio(String roomId, AudioChunkRequest payload) {
         try {
             byte[] audioBytes = Base64.getDecoder().decode(payload.getAudioDataBase64());
-            log.info("Decoded audio chunk {} from participant {} in room {}, size={} bytes",
-                    payload.getChunkIndex(), payload.getParticipantId(), roomId, audioBytes.length);
+            log.info("Decoded audio chunk {} from participant {} in room {}, size={} bytes, isForceCut={}",
+                    payload.getChunkIndex(), payload.getParticipantId(), roomId, audioBytes.length, payload.isForceCut());
 
             String rawText = callTranscribeApi(audioBytes, payload.getSampleRate(), payload.getChannels());
             log.debug("AI transcript for chunk {}: {}", payload.getChunkIndex(), rawText);
 
-            String cleanText = textDedupService.deduplicate(roomId, payload.getParticipantId(), rawText);
-            log.debug("After dedup for chunk {}: {}", payload.getChunkIndex(), cleanText);
+            Map<String, Object> result = new HashMap<>();
+            result.put("text", rawText);
+            result.put("isFinal", !payload.isForceCut());
 
-            if (!cleanText.isBlank()) {
+            if (rawText.isBlank()) {
+                return CompletableFuture.completedFuture(result);
+            }
+
+            if (payload.isForceCut()) {
+                String cleanText = textDedupService.deduplicate(roomId, payload.getParticipantId(), rawText);
+                log.debug("After dedup for forced-cut chunk {}: {}", payload.getChunkIndex(), cleanText);
+
+                if (!cleanText.isBlank()) {
+                    MeetingTranscript transcript = MeetingTranscript.builder()
+                            .roomId(roomId)
+                            .participantId(payload.getParticipantId())
+                            .participantName(payload.getParticipantName())
+                            .chunkIndex(payload.getChunkIndex())
+                            .startTimeMs(payload.getStartTimeMs())
+                            .endTimeMs(payload.getEndTimeMs())
+                            .content(cleanText)
+                            .build();
+                    transcriptBufferService.addToBuffer(transcript);
+                }
+                result.put("text", cleanText);
+            } else {
+                log.debug("Natural cut — skipping dedup for chunk {}", payload.getChunkIndex());
+
                 MeetingTranscript transcript = MeetingTranscript.builder()
                         .roomId(roomId)
                         .participantId(payload.getParticipantId())
@@ -58,12 +83,13 @@ public class AudioProcessingService {
                         .chunkIndex(payload.getChunkIndex())
                         .startTimeMs(payload.getStartTimeMs())
                         .endTimeMs(payload.getEndTimeMs())
-                        .content(cleanText)
+                        .content(rawText)
                         .build();
                 transcriptBufferService.addToBuffer(transcript);
+                result.put("text", rawText);
             }
 
-            return CompletableFuture.completedFuture(cleanText);
+            return CompletableFuture.completedFuture(result);
         } catch (IllegalArgumentException e) {
             log.error("Failed to decode base64 audio from participant {} in room {}: {}",
                     payload.getParticipantId(), roomId, e.getMessage());

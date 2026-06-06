@@ -10,6 +10,7 @@ import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @Slf4j
@@ -29,17 +30,22 @@ public class AudioTranscriptionController {
                 payload.getChunkIndex(), payload.getParticipantId(), roomId);
 
         audioProcessingService.processAudio(roomId, payload)
-                .thenAccept(cleanText -> {
-                    if (!cleanText.isBlank()) {
+                .thenAccept(result -> {
+                    String text = (String) result.get("text");
+                    boolean isFinal = (boolean) result.get("isFinal");
+
+                    if (!text.isBlank()) {
+                        Map<String, Object> message = new HashMap<>();
+                        message.put("roomId", roomId);
+                        message.put("participantId", payload.getParticipantId());
+                        message.put("participantName", payload.getParticipantName());
+                        message.put("chunkIndex", payload.getChunkIndex());
+                        message.put("text", text);
+                        message.put("isFinal", isFinal);
+
                         messagingTemplate.convertAndSend(
                                 "/topic/rooms/" + roomId + "/transcript",
-                                Map.of(
-                                        "roomId", roomId,
-                                        "participantId", payload.getParticipantId(),
-                                        "participantName", payload.getParticipantName(),
-                                        "chunkIndex", payload.getChunkIndex(),
-                                        "text", cleanText
-                                )
+                                message
                         );
                     }
                 })
