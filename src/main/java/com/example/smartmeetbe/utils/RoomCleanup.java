@@ -3,6 +3,7 @@ package com.example.smartmeetbe.utils;
 import com.example.smartmeetbe.constant.RoomStatus;
 import com.example.smartmeetbe.entity.Room;
 import com.example.smartmeetbe.repository.RoomRepository;
+import com.example.smartmeetbe.service.MeetingFinalizationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -20,6 +21,7 @@ public class RoomCleanup {
 
     private final RoomRepository roomRepository;
     private final StringRedisTemplate redisTemplate;
+    private final MeetingFinalizationService meetingFinalizationService;
 
     /**
      * Chạy mỗi 15 phút, tìm các phòng ACTIVE đã quá expiresAt → chuyển sang ENDED.
@@ -35,6 +37,7 @@ public class RoomCleanup {
         expiredRooms.forEach(room -> {
             room.setStatus(RoomStatus.ENDED);
             redisTemplate.delete("room:participants:" + room.getRoomCode());
+            meetingFinalizationService.finalizeAsync(room.getRoomCode());
             log.info("Room expired and cleaned up: {}", room.getRoomCode());
         });
 

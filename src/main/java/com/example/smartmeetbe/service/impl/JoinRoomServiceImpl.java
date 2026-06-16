@@ -13,6 +13,7 @@ import com.example.smartmeetbe.repository.RoomRepository;
 import com.example.smartmeetbe.service.JoinRoomService;
 import com.example.smartmeetbe.service.LiveKitTokenService;
 import com.example.smartmeetbe.service.RoomService;
+import com.example.smartmeetbe.service.MeetingFinalizationService;
 import com.example.smartmeetbe.service.UserService;
 import com.example.smartmeetbe.dto.request.JoinRoomRequest;
 import jakarta.transaction.Transactional;
@@ -45,6 +46,7 @@ public class JoinRoomServiceImpl implements JoinRoomService {
     private static final String ROOM_PARTICIPANT_KEY = "room:participants:";
     private static final String ROOM_JOIN_LOCK_KEY = "room:join:lock:";
     private final StringRedisTemplate redisTemplate;
+    private final MeetingFinalizationService meetingFinalizationService;
 
     @Value("${app.room.max-participants}")
     private int maxParticipants;
@@ -194,6 +196,7 @@ public class JoinRoomServiceImpl implements JoinRoomService {
         room.setStatus(RoomStatus.ENDED);
         roomRepository.save(room);
         redisTemplate.delete(ROOM_PARTICIPANT_KEY + room.getRoomCode());
+        meetingFinalizationService.finalizeAsync(room.getRoomCode());
     }
 
     private Room getActiveRoom(String roomCode) {
