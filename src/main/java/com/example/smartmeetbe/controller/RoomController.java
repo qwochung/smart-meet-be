@@ -13,6 +13,8 @@ import jakarta.validation.Valid;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import com.example.smartmeetbe.dto.response.RoomMinuteResponse;
+import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -82,6 +84,19 @@ public class RoomController {
         return ResponseEntity.ok(ApiResponse.<Void>builder()
                 .success(true)
                 .message("User rejected successfully")
+                .build());
+    }
+
+    @GetMapping("/minutes")
+    public ResponseEntity<ApiResponse<List<RoomMinuteResponse>>> getRoomMinutes(
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String date) {
+        String userEmail = SecurityUtil.getCurrentUser();
+        List<RoomMinuteResponse> minutes = roomService.getRoomMinutesForUser(userEmail, name, date);
+        return ResponseEntity.ok(ApiResponse.<List<RoomMinuteResponse>>builder()
+                .success(true)
+                .message("Room minutes retrieved successfully")
+                .data(minutes)
                 .build());
     }
 }
