@@ -27,7 +27,16 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.example.smartmeetbe.document.MeetingSummary;
+import com.example.smartmeetbe.document.RoomTranscript;
+import com.example.smartmeetbe.dto.response.RoomMinuteResponse;
+import com.example.smartmeetbe.repository.mongo.MeetingSummaryRepository;
+import com.example.smartmeetbe.repository.mongo.RoomTranscriptRepository;
+
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 @Service
@@ -42,6 +51,8 @@ public class RoomServiceImpl implements RoomService {
     private final LiveKitConfig liveKitConfig;
     private final StringRedisTemplate redisTemplate;
     private final JoinRoomRepository joinRoomRepository;
+    final MeetingSummaryRepository meetingSummaryRepository;
+    final RoomTranscriptRepository roomTranscriptRepository;
 
     @Value("${app.room.max-participants}")
     private int maxParticipants;
@@ -78,6 +89,7 @@ public class RoomServiceImpl implements RoomService {
                 .scheduledAt(request.getScheduledAt())
                 .roomCode(generateUniqueRoomCode())
                 .expiresAt(LocalDateTime.now().plusMinutes(durationMinutes))
+                .participants(new ArrayList<>(List.of(host)))
                 .build();
 
         roomRepository.save(room);
@@ -134,5 +146,39 @@ public class RoomServiceImpl implements RoomService {
     public Room findByRoomCodeAndStatus(String code, RoomStatus roomStatus) {
         return roomRepository.findByRoomCodeAndStatus(code, roomStatus)
                 .orElseThrow(() -> new RuntimeException("Room not found"));
+    }
+
+    @Override
+    public List<RoomMinuteResponse> getRoomMinutesForUser(String userEmail, String name, String dateStr) {
+        User user = userService.findByEmail(userEmail);
+        
+        LocalDateTime startDate = null;
+        LocalDateTime endDate = null;
+        
+        if (dateStr != null && !dateStr.isBlank()) {
+            try {
+                java.time.LocalDate date = java.time.LocalDate.parse(dateStr);
+                startDate = date.atStartOfDay();
+                endDate = date.atTime(23, 59, 59, 999999999);
+            } catch (java.time.format.DateTimeParseException e) {
+                log.warn("Invalid date format: {}", dateStr);
+            }
+        }
+        
+        String searchName = (name != null && !name.isBlank()) ? name : null;
+        
+        List<Room> rooms = roomRepository.findRoomsForUser(user.getId(), searchName, startDate, endDate);
+        
+        List<RoomMinuteResponse> responseList = new ArrayList<>();
+        for (Room room : rooms) {
+            responseList.add(RoomMinuteResponse.builder()
+                    .roomCode(room.getRoomCode())
+                    .name(room.getName())
+                    .description(room.getDescription())
+                    .expiresAt(room.getExpiresAt())
+                    .status(room.getStatus())
+                    .build());
+        }
+        return responseList;
     }
 }
