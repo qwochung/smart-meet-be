@@ -30,6 +30,8 @@ public class RoomTranscript extends MongoAuditable {
 
     private String fullText;
 
+    private String smoothedText;
+
     @Builder.Default
     private List<TranscriptSegmentDto> segments = new ArrayList<>();
 

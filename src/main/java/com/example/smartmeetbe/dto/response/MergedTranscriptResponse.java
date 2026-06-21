@@ -12,6 +12,7 @@ public record MergedTranscriptResponse(
         int version,
         MergeStatus status,
         String fullText,
+        String smoothedText,
         List<TranscriptSegmentDto> segments,
         int processedChunkCount,
         LocalDateTime lastMergedAt
