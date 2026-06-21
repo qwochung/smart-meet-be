@@ -28,6 +28,8 @@ import org.springframework.beans.factory.annotation.Value;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -122,6 +124,15 @@ public class JoinRoomServiceImpl implements JoinRoomService {
 
         joinRoom.setStatus(JoinRoomStatus.APPROVED);
         joinRoomRepository.save(joinRoom);
+
+        // Add participant to the room's participants list to sync with room_participants table
+        if (room.getParticipants() == null) {
+            room.setParticipants(new ArrayList<>());
+        }
+        if (!room.getParticipants().contains(participant)) {
+            room.getParticipants().add(participant);
+            roomRepository.save(room);
+        }
 
         // Pass the real display name so the LiveKit token carries it
         String livekitToken = liveKitTokenService.generateToken(

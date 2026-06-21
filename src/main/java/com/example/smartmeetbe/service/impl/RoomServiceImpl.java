@@ -28,6 +28,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @Service
@@ -78,6 +80,7 @@ public class RoomServiceImpl implements RoomService {
                 .scheduledAt(request.getScheduledAt())
                 .roomCode(generateUniqueRoomCode())
                 .expiresAt(LocalDateTime.now().plusMinutes(durationMinutes))
+                .participants(new ArrayList<>(List.of(host)))
                 .build();
 
         roomRepository.save(room);
