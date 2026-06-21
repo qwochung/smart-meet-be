@@ -74,6 +74,10 @@ livekit:
 ai-server:
   transcribe-url: http://localhost:8000/api/transcribe/chunk
 
+gemini:
+  api-key: ${GEMINI_API_KEY}
+  prompt: "${GEMINI_PROMPT:Bạn là một trợ lý biên tập chuyên nghiệp. Hãy hiệu đính, sửa các lỗi chính tả, các từ bị nhận dạng sai và làm mượt biên bản cuộc họp thô dưới đây. Yêu cầu nghiêm ngặt: 1. Giữ nguyên định dạng hội thoại '[Tên]: Nội dung phát biểu' và giữ nguyên tên người nói. 2. Không thay đổi ý nghĩa gốc hoặc thêm bớt thông tin. 3. TUYỆT ĐỐI KHÔNG viết thêm bất kỳ câu dẫn dắt nào (như 'Dưới đây là...'), lời chào hay ghi chú. Chỉ trả về duy nhất nội dung hội thoại đã được làm mịn.}"
+
 transcript:
   merge:
     debounce-ms: 200

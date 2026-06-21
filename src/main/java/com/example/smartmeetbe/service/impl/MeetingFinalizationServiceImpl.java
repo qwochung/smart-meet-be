@@ -8,6 +8,7 @@ import com.example.smartmeetbe.dto.response.MergedTranscriptResponse;
 import com.example.smartmeetbe.repository.mongo.RoomTranscriptRepository;
 import com.example.smartmeetbe.repository.mongo.TranscriptChunkRepository;
 import com.example.smartmeetbe.service.FullTranscriptMergeService;
+import com.example.smartmeetbe.service.GeminiService;
 import com.example.smartmeetbe.service.MeetingFinalizationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +29,7 @@ public class MeetingFinalizationServiceImpl implements MeetingFinalizationServic
     private final TranscriptChunkRepository transcriptChunkRepository;
     private final RoomTranscriptRepository roomTranscriptRepository;
     private final FullTranscriptMergeService fullTranscriptMergeService;
+    private final GeminiService geminiService;
     private final ConcurrentHashMap<String, ReentrantLock> roomLocks = new ConcurrentHashMap<>();
 
     @Async
@@ -62,6 +64,11 @@ public class MeetingFinalizationServiceImpl implements MeetingFinalizationServic
             doc.setProcessedChunkCount(chunks.size());
             doc.setLastProcessedChunkId(chunks.isEmpty() ? null : chunks.get(chunks.size() - 1).getId());
             doc.setStatus(MergeStatus.FINAL);
+
+            // Smooth text using Gemini API
+            String smoothed = geminiService.smoothTranscript(result.fullText());
+            doc.setSmoothedText(smoothed);
+
             roomTranscriptRepository.save(doc);
 
             log.info("Finalized transcript for room {} with {} segments from {} chunks",
@@ -89,6 +96,7 @@ public class MeetingFinalizationServiceImpl implements MeetingFinalizationServic
                         .version(0)
                         .status(MergeStatus.PROCESSING)
                         .fullText("")
+                        .smoothedText("")
                         .segments(List.of())
                         .processedChunkCount(0)
                         .lastMergedAt(null)
@@ -104,6 +112,7 @@ public class MeetingFinalizationServiceImpl implements MeetingFinalizationServic
                 .version(doc.getVersion() != null ? doc.getVersion() : 0)
                 .status(doc.getStatus())
                 .fullText(doc.getFullText() != null ? doc.getFullText() : "")
+                .smoothedText(doc.getSmoothedText() != null ? doc.getSmoothedText() : "")
                 .segments(doc.getSegments() != null ? doc.getSegments() : List.of())
                 .processedChunkCount(doc.getProcessedChunkCount() != null ? doc.getProcessedChunkCount() : 0)
                 .lastMergedAt(lastMergedAt)
