@@ -51,4 +51,8 @@ public class Room extends BaseEntity {
     
     LocalDateTime scheduledAt;
     LocalDateTime expiresAt;
+
+    // Nhãn lặp lịch (vd "Lặp hằng tuần"); null nếu là cuộc họp đơn lẻ
+    @Column(name = "recurrence_rule")
+    String recurrenceRule;
 }

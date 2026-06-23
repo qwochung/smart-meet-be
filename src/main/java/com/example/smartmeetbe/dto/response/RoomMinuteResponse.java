@@ -15,7 +15,9 @@ public class RoomMinuteResponse {
     String roomCode;
     String name;
     String description;
+    LocalDateTime scheduledAt;
     LocalDateTime expiresAt;
     RoomStatus status;
     String summary;
+    String recurrenceRule;
 }
