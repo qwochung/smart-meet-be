@@ -6,7 +6,9 @@ import com.example.smartmeetbe.constant.JoinRoomStatus;
 import com.example.smartmeetbe.constant.Role;
 import com.example.smartmeetbe.constant.RoomStatus;
 import com.example.smartmeetbe.dto.mapper.RoomMapper;
+import com.example.smartmeetbe.constant.RecurrenceType;
 import com.example.smartmeetbe.dto.request.RoomRequest;
+import com.example.smartmeetbe.dto.request.ScheduleMeetingRequest;
 import com.example.smartmeetbe.dto.response.RoomResponse;
 import com.example.smartmeetbe.entity.JoinRoom;
 import com.example.smartmeetbe.entity.Room;
@@ -30,14 +32,22 @@ import org.springframework.transaction.annotation.Transactional;
 import com.example.smartmeetbe.document.MeetingSummary;
 import com.example.smartmeetbe.document.RoomTranscript;
 import com.example.smartmeetbe.dto.response.RoomMinuteResponse;
+import com.example.smartmeetbe.dto.response.DashboardResponse;
 import com.example.smartmeetbe.repository.mongo.MeetingSummaryRepository;
 import com.example.smartmeetbe.repository.mongo.RoomTranscriptRepository;
 
+import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @Service
 @FieldDefaults(level = AccessLevel.PRIVATE)
@@ -175,10 +185,213 @@ public class RoomServiceImpl implements RoomService {
                     .roomCode(room.getRoomCode())
                     .name(room.getName())
                     .description(room.getDescription())
+                    .scheduledAt(room.getScheduledAt())
                     .expiresAt(room.getExpiresAt())
                     .status(room.getStatus())
+                    .recurrenceRule(room.getRecurrenceRule())
                     .build());
         }
         return responseList;
+    }
+
+    @Override
+    public DashboardResponse getDashboard(String userEmail) {
+        User user = userService.findByEmail(userEmail);
+
+        // Lấy toàn bộ phòng user tham gia (host hoặc participant)
+        List<Room> rooms = roomRepository.findRoomsForUser(user.getId(), null, null, null);
+
+        // Mốc tuần hiện tại: thứ Hai 00:00 -> Chủ nhật 23:59:59
+        LocalDate today = LocalDate.now();
+        LocalDateTime weekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).atStartOfDay();
+        LocalDateTime weekEnd = today.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY)).atTime(23, 59, 59, 999_999_999);
+
+        // ===== Thống kê tổng quan =====
+        long totalMeetings = rooms.size();
+        long minutesCreated = rooms.stream()
+                .filter(r -> r.getStatus() == RoomStatus.ENDED)
+                .count();
+        long activeRooms = rooms.stream()
+                .filter(r -> r.getStatus() == RoomStatus.ACTIVE)
+                .count();
+        long waitingRooms = rooms.stream()
+                .filter(r -> r.getStatus() == RoomStatus.WAITING)
+                .count();
+        long meetingsThisWeek = rooms.stream()
+                .map(Room::getCreatedAt)
+                .filter(c -> c != null && !c.isBefore(weekStart) && !c.isAfter(weekEnd))
+                .count();
+
+        DashboardResponse.Stats stats = DashboardResponse.Stats.builder()
+                .totalMeetings(totalMeetings)
+                .meetingsThisWeek(meetingsThisWeek)
+                .minutesCreated(minutesCreated)
+                .activeRooms(activeRooms)
+                .waitingRooms(waitingRooms)
+                .build();
+
+        // ===== Xu hướng theo tuần (Thứ 2 -> Chủ nhật) =====
+        Map<DayOfWeek, Long> countByDay = rooms.stream()
+                .map(Room::getCreatedAt)
+                .filter(c -> c != null && !c.isBefore(weekStart) && !c.isAfter(weekEnd))
+                .collect(Collectors.groupingBy(c -> c.getDayOfWeek(), Collectors.counting()));
+
+        Map<DayOfWeek, String> dayLabels = new LinkedHashMap<>();
+        dayLabels.put(DayOfWeek.MONDAY, "T2");
+        dayLabels.put(DayOfWeek.TUESDAY, "T3");
+        dayLabels.put(DayOfWeek.WEDNESDAY, "T4");
+        dayLabels.put(DayOfWeek.THURSDAY, "T5");
+        dayLabels.put(DayOfWeek.FRIDAY, "T6");
+        dayLabels.put(DayOfWeek.SATURDAY, "T7");
+        dayLabels.put(DayOfWeek.SUNDAY, "CN");
+
+        List<DashboardResponse.TrendPoint> weeklyTrend = dayLabels.entrySet().stream()
+                .map(e -> DashboardResponse.TrendPoint.builder()
+                        .day(e.getValue())
+                        .meetings(countByDay.getOrDefault(e.getKey(), 0L))
+                        .build())
+                .collect(Collectors.toList());
+
+        // ===== Phân bố cuộc họp theo khung giờ trong ngày (dựa trên createdAt) =====
+        String[] hourLabels = {"0-6h", "6-9h", "9-12h", "12-15h", "15-18h", "18-24h"};
+        long[] hourCounts = new long[hourLabels.length];
+        for (Room r : rooms) {
+            LocalDateTime created = r.getCreatedAt();
+            if (created == null) continue;
+            int hour = created.getHour();
+            int bucket;
+            if (hour < 6) bucket = 0;
+            else if (hour < 9) bucket = 1;
+            else if (hour < 12) bucket = 2;
+            else if (hour < 15) bucket = 3;
+            else if (hour < 18) bucket = 4;
+            else bucket = 5;
+            hourCounts[bucket]++;
+        }
+        List<DashboardResponse.HourBucket> hourlyDistribution = new ArrayList<>();
+        for (int i = 0; i < hourLabels.length; i++) {
+            hourlyDistribution.add(DashboardResponse.HourBucket.builder()
+                    .label(hourLabels[i])
+                    .meetings(hourCounts[i])
+                    .build());
+        }
+
+        // ===== Cuộc họp sắp tới (chưa kết thúc), sắp xếp theo thời điểm gần nhất =====
+        List<DashboardResponse.MeetingItem> upcomingMeetings = rooms.stream()
+                .filter(r -> r.getStatus() != RoomStatus.ENDED)
+                .sorted(Comparator.comparing(
+                        r -> r.getScheduledAt() != null ? r.getScheduledAt() : r.getExpiresAt(),
+                        Comparator.nullsLast(Comparator.naturalOrder())))
+                .limit(5)
+                .map(r -> DashboardResponse.MeetingItem.builder()
+                        .roomCode(r.getRoomCode())
+                        .name(r.getName())
+                        .status(r.getStatus())
+                        .scheduledAt(r.getScheduledAt())
+                        .expiresAt(r.getExpiresAt())
+                        .participants(getLiveParticipantCount(r.getRoomCode()))
+                        .recurrenceRule(r.getRecurrenceRule())
+                        .build())
+                .collect(Collectors.toList());
+
+        // ===== Biên bản gần đây (phòng đã kết thúc), mới nhất trước =====
+        List<DashboardResponse.MeetingItem> recentMinutes = rooms.stream()
+                .filter(r -> r.getStatus() == RoomStatus.ENDED)
+                .sorted(Comparator.comparing(
+                        Room::getExpiresAt,
+                        Comparator.nullsLast(Comparator.reverseOrder())))
+                .limit(5)
+                .map(r -> DashboardResponse.MeetingItem.builder()
+                        .roomCode(r.getRoomCode())
+                        .name(r.getName())
+                        .status(r.getStatus())
+                        .scheduledAt(r.getScheduledAt())
+                        .expiresAt(r.getExpiresAt())
+                        .participants(0)
+                        .build())
+                .collect(Collectors.toList());
+
+        // ===== Trạng thái phòng đang trực tiếp =====
+        List<DashboardResponse.RoomStatusItem> roomStatus = rooms.stream()
+                .filter(r -> r.getStatus() == RoomStatus.ACTIVE)
+                .limit(6)
+                .map(r -> DashboardResponse.RoomStatusItem.builder()
+                        .roomCode(r.getRoomCode())
+                        .name(r.getName())
+                        .live(true)
+                        .participants(getLiveParticipantCount(r.getRoomCode()))
+                        .build())
+                .collect(Collectors.toList());
+
+        return DashboardResponse.builder()
+                .stats(stats)
+                .weeklyTrend(weeklyTrend)
+                .hourlyDistribution(hourlyDistribution)
+                .upcomingMeetings(upcomingMeetings)
+                .recentMinutes(recentMinutes)
+                .roomStatus(roomStatus)
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public List<RoomResponse> scheduleRecurringMeetings(ScheduleMeetingRequest request, String hostEmail) {
+        User host = userService.findByEmail(hostEmail);
+
+        RecurrenceType recurrenceType = request.getRecurrenceType() != null
+                ? request.getRecurrenceType()
+                : RecurrenceType.NONE;
+        int occurrences = recurrenceType == RecurrenceType.NONE ? 1 : Math.max(1, request.getOccurrences());
+        String recurrenceRule = recurrenceType.label();
+
+        List<RoomResponse> created = new ArrayList<>();
+        LocalDateTime firstStart = request.getScheduledAt();
+
+        for (int i = 0; i < occurrences; i++) {
+            LocalDateTime startAt = switch (recurrenceType) {
+                case DAILY -> firstStart.plusDays(i);
+                case WEEKLY -> firstStart.plusWeeks(i);
+                case MONTHLY -> firstStart.plusMonths(i);
+                default -> firstStart;
+            };
+
+            Room room = Room.builder()
+                    .name(request.getName())
+                    .description(request.getDescription())
+                    .hostUser(host)
+                    .hostId(host.getId())
+                    .status(RoomStatus.WAITING)
+                    .scheduledAt(startAt)
+                    .roomCode(generateUniqueRoomCode())
+                    .expiresAt(startAt.plusMinutes(durationMinutes))
+                    .participants(new ArrayList<>(List.of(host)))
+                    .recurrenceRule(occurrences > 1 ? recurrenceRule : null)
+                    .build();
+
+            roomRepository.save(room);
+
+            JoinRoom hostJoin = JoinRoom.builder()
+                    .room(room)
+                    .user(host)
+                    .role(Role.HOST)
+                    .status(JoinRoomStatus.APPROVED)
+                    .build();
+            joinRoomRepository.save(hostJoin);
+
+            created.add(roomMapper.toResponse(room));
+        }
+
+        log.info("Scheduled {} recurring meeting(s) ({}) for host {}", occurrences, recurrenceType, hostEmail);
+        return created;
+    }
+
+    // Đọc số participant đang trong phòng từ Redis (an toàn nếu key không tồn tại)
+    private int getLiveParticipantCount(String roomCode) {
+        try {
+            String value = redisTemplate.opsForValue().get(ROOM_PARTICIPANT_KEY + roomCode);
+            return value != null ? Integer.parseInt(value) : 0;
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 }

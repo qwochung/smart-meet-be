@@ -3,9 +3,11 @@ package com.example.smartmeetbe.controller;
 import com.example.smartmeetbe.dto.request.AcceptRejectRequest;
 import com.example.smartmeetbe.dto.request.JoinRoomRequest;
 import com.example.smartmeetbe.dto.request.RoomRequest;
+import com.example.smartmeetbe.dto.request.ScheduleMeetingRequest;
 import com.example.smartmeetbe.dto.response.ApiResponse;
 import com.example.smartmeetbe.dto.response.JoinRoomResponse;
 import com.example.smartmeetbe.dto.response.RoomResponse;
+import com.example.smartmeetbe.dto.response.DashboardResponse;
 import com.example.smartmeetbe.service.JoinRoomService;
 import com.example.smartmeetbe.service.RoomService;
 import com.example.smartmeetbe.utils.SecurityUtil;
@@ -84,6 +86,29 @@ public class RoomController {
         return ResponseEntity.ok(ApiResponse.<Void>builder()
                 .success(true)
                 .message("User rejected successfully")
+                .build());
+    }
+
+    @PostMapping("/schedule")
+    public ResponseEntity<ApiResponse<List<RoomResponse>>> scheduleRecurringMeetings(
+            @Valid @RequestBody ScheduleMeetingRequest request) {
+        String hostEmail = SecurityUtil.getCurrentUser();
+        List<RoomResponse> rooms = roomService.scheduleRecurringMeetings(request, hostEmail);
+        return ResponseEntity.ok(ApiResponse.<List<RoomResponse>>builder()
+                .success(true)
+                .message("Scheduled " + rooms.size() + " meeting(s) successfully")
+                .data(rooms)
+                .build());
+    }
+
+    @GetMapping("/dashboard")
+    public ResponseEntity<ApiResponse<DashboardResponse>> getDashboard() {
+        String userEmail = SecurityUtil.getCurrentUser();
+        DashboardResponse dashboard = roomService.getDashboard(userEmail);
+        return ResponseEntity.ok(ApiResponse.<DashboardResponse>builder()
+                .success(true)
+                .message("Dashboard retrieved successfully")
+                .data(dashboard)
                 .build());
     }
 

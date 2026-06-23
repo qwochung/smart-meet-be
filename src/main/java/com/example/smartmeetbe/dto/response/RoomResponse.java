@@ -17,4 +17,5 @@ public class RoomResponse {
     LocalDateTime updatedAt;
     String livekitToken;
     String livekitHost;
+    String recurrenceRule;
 }
