@@ -1,5 +1,6 @@
 package com.example.smartmeetbe.document;
 
+import com.example.smartmeetbe.dto.response.MasterMeetingSummaryDto;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -8,8 +9,6 @@ import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
-
-import java.util.ArrayList;
 import java.util.List;
 
 @Data
@@ -26,10 +25,11 @@ public class MeetingSummary extends MongoAuditable {
     @Indexed(unique = true)
     private String roomId;
 
-    private String summaryText;
-
-    @Builder.Default
-    private List<String> actionItems = new ArrayList<>();
-
-    private String modelVersion;
+    private String executiveSummary;
+    private List<String> discussionTopics;
+    private List<String> decisionsMade;
+    private List<MasterMeetingSummaryDto.ActionItemDto> actionItems;
+    private List<MasterMeetingSummaryDto.QaPairDto> qaPairs;
+    private List<String> painPoints;
+    private List<MasterMeetingSummaryDto.ProConDto> prosAndCons;
 }

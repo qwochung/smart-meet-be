@@ -28,4 +28,6 @@ public class ScheduleMeetingRequest {
     @Min(1)
     @Max(12)
     int occurrences = 1;
+
+    com.example.smartmeetbe.constant.MeetingType typeCode;
 }

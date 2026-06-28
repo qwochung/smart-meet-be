@@ -1,15 +1,23 @@
 package com.example.smartmeetbe.service.impl;
 
+import com.example.smartmeetbe.constant.MeetingType;
 import com.example.smartmeetbe.constant.MergeStatus;
+import com.example.smartmeetbe.document.MeetingSummary;
 import com.example.smartmeetbe.document.RoomTranscript;
 import com.example.smartmeetbe.document.TranscriptChunk;
 import com.example.smartmeetbe.dto.response.FullMergeResult;
+import com.example.smartmeetbe.dto.response.MasterMeetingSummaryDto;
 import com.example.smartmeetbe.dto.response.MergedTranscriptResponse;
+import com.example.smartmeetbe.entity.Room;
+import com.example.smartmeetbe.repository.RoomRepository;
+import com.example.smartmeetbe.repository.mongo.MeetingSummaryRepository;
 import com.example.smartmeetbe.repository.mongo.RoomTranscriptRepository;
 import com.example.smartmeetbe.repository.mongo.TranscriptChunkRepository;
 import com.example.smartmeetbe.service.FullTranscriptMergeService;
 import com.example.smartmeetbe.service.GeminiService;
 import com.example.smartmeetbe.service.MeetingFinalizationService;
+import com.example.smartmeetbe.strategy.MeetingSummaryContext;
+import com.example.smartmeetbe.strategy.MeetingSummaryStrategy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -30,6 +38,9 @@ public class MeetingFinalizationServiceImpl implements MeetingFinalizationServic
     private final RoomTranscriptRepository roomTranscriptRepository;
     private final FullTranscriptMergeService fullTranscriptMergeService;
     private final GeminiService geminiService;
+    private final RoomRepository roomRepository;
+    private final MeetingSummaryRepository meetingSummaryRepository;
+    private final MeetingSummaryContext meetingSummaryContext;
     private final ConcurrentHashMap<String, ReentrantLock> roomLocks = new ConcurrentHashMap<>();
 
     @Async
@@ -70,6 +81,32 @@ public class MeetingFinalizationServiceImpl implements MeetingFinalizationServic
             doc.setSmoothedText(smoothed);
 
             roomTranscriptRepository.save(doc);
+
+            // Tóm tắt cuộc họp thông minh theo từng loại (Dynamic Prompting - Strategy Pattern)
+            try {
+                log.info("Generating dynamic AI summary for room {}...", roomId);
+                Room room = roomRepository.findByRoomCode(roomId).orElse(null);
+                MeetingType typeCode = (room != null && room.getTypeCode() != null) ? room.getTypeCode() : MeetingType.GENERAL;
+                
+                MeetingSummaryStrategy strategy = meetingSummaryContext.getStrategy(typeCode);
+                MasterMeetingSummaryDto summaryDto = strategy.generateSummary(roomId, result.fullText());
+                
+                MeetingSummary summaryDoc = meetingSummaryRepository.findByRoomId(roomId)
+                        .orElse(MeetingSummary.builder().roomId(roomId).build());
+                
+                summaryDoc.setExecutiveSummary(summaryDto.getExecutiveSummary());
+                summaryDoc.setDiscussionTopics(summaryDto.getDiscussionTopics());
+                summaryDoc.setDecisionsMade(summaryDto.getDecisionsMade());
+                summaryDoc.setActionItems(summaryDto.getActionItems());
+                summaryDoc.setQaPairs(summaryDto.getQaPairs());
+                summaryDoc.setPainPoints(summaryDto.getPainPoints());
+                summaryDoc.setProsAndCons(summaryDto.getProsAndCons());
+                
+                meetingSummaryRepository.save(summaryDoc);
+                log.info("Successfully generated and saved AI summary for room {} using strategy {}", roomId, typeCode);
+            } catch (Exception e) {
+                log.error("Failed to generate dynamic AI summary for room {}: {}", roomId, e.getMessage(), e);
+            }
 
             log.info("Finalized transcript for room {} with {} segments from {} chunks",
                     roomId, result.segments().size(), chunks.size());

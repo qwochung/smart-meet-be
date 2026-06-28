@@ -1,0 +1,284 @@
+-- -- ==========================================
+-- -- SCRIPT KHỞI TẠO BẢNG VÀ SEED DỮ LIỆU PROMPT TEMPLATE
+-- -- Dự án: Smart Meet - AI Meeting Summary
+-- -- Hướng dẫn: Người dùng execute tay script này trên database PostgreSQL remote.
+-- -- ==========================================
+-- 
+-- -- 1. Tạo bảng prompt_template (nếu chưa tồn tại)
+-- CREATE TABLE IF NOT EXISTS prompt_template (
+--     id SERIAL PRIMARY KEY,
+--     type_code VARCHAR(50) UNIQUE NOT NULL,
+--     system_prompt TEXT NOT NULL,
+--     json_schema TEXT NOT NULL,
+--     is_active BOOLEAN DEFAULT TRUE,
+--     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+--     updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+-- );
+-- 
+-- -- 2. Seed dữ liệu 6 System Prompts mặc định
+-- -- Sử dụng dollar-quoted string $$ của PostgreSQL để tránh lỗi ký tự đặc biệt
+-- 
+-- -- Prompt 1: Họp Dự Án / Đồng Bộ (SCRUM_SYNC)
+-- INSERT INTO prompt_template (type_code, system_prompt, json_schema, is_active)
+-- VALUES (
+--     'SCRUM_SYNC',
+--     $$Bạn là một Scrum Master chuyên nghiệp. Nhiệm vụ của bạn là phân tích đoạn hội thoại cuộc họp (transcript) thô và tạo bản tóm tắt chuẩn Agile/Scrum.
+-- Hãy phân tích và điền vào cấu trúc Master JSON Schema theo các quy tắc sau:
+-- 1. `executiveSummary`: Tóm tắt ngắn gọn (2-3 câu) về tiến độ chung của Sprint và mục tiêu đạt được trong buổi họp.
+-- 2. `discussionTopics`: Phân chia rõ ràng thành 2 nhóm nội dung:
+--    - "Tiến độ (What's done): [Tên người] đã hoàn thành [nhiệm vụ]"
+--    - "Kế hoạch (What's next): [Tên người] dự kiến làm [nhiệm vụ]"
+-- 3. `painPoints`: Trích xuất toàn bộ các Rào cản/Khó khăn (Blockers/Impediments) mà các thành viên đang gặp phải làm cản trở tiến độ.
+-- 4. `actionItems`: Trích xuất các đầu việc phát sinh cụ thể.
+--    - BẮT BUỘC định dạng trường `deadline` theo kiểu YYYY-MM-DD. Nếu không nhắc tới hạn cụ thể, bắt buộc trả về chuỗi rỗng "". Không được tự bịa ngày hoặc dùng từ tương đối.
+-- 5. Các trường còn lại (`decisionsMade`, `qaPairs`, `prosAndCons`) BẮT BUỘC trả về mảng rỗng [] thay vì bỏ qua hay trả về null.$$,
+--     $${
+--   "type": "object",
+--   "properties": {
+--     "executiveSummary": { "type": "string" },
+--     "discussionTopics": { "type": "array", "items": { "type": "string" } },
+--     "decisionsMade": { "type": "array", "items": { "type": "string" } },
+--     "actionItems": {
+--       "type": "array",
+--       "items": {
+--         "type": "object",
+--         "properties": {
+--           "task": { "type": "string" },
+--           "assignee": { "type": "string" },
+--           "deadline": { "type": "string" }
+--         },
+--         "required": ["task", "assignee", "deadline"]
+--       }
+--     },
+--     "qaPairs": { "type": "array", "items": { "type": "object" } },
+--     "painPoints": { "type": "array", "items": { "type": "string" } },
+--     "prosAndCons": { "type": "array", "items": { "type": "object" } }
+--   },
+--   "required": ["executiveSummary"]
+-- }$$,
+--     true
+-- )
+-- ON CONFLICT (type_code) 
+-- DO UPDATE SET 
+--     system_prompt = EXCLUDED.system_prompt,
+--     json_schema = EXCLUDED.json_schema,
+--     updated_at = CURRENT_TIMESTAMP;
+-- 
+-- -- Prompt 2: Gặp Khách Hàng (CLIENT_SALES)
+-- INSERT INTO prompt_template (type_code, system_prompt, json_schema, is_active)
+-- VALUES (
+--     'CLIENT_SALES',
+--     $$Bạn là một Chuyên viên Tư vấn Giải pháp & Sales chuyên nghiệp. Nhiệm vụ của bạn là phân tích hội thoại để làm rõ yêu cầu khách hàng.
+-- Hãy phân tích và điền vào cấu trúc Master JSON Schema theo các quy tắc sau:
+-- 1. `executiveSummary`: Tóm tắt bối cảnh buổi gặp mặt, mục tiêu của khách hàng khi tìm đến giải pháp.
+-- 2. `painPoints`: Điền toàn bộ các Nhu cầu & Điểm đau (Need & Pain Points) - những vấn đề khó khăn mà khách hàng đang gặp phải trong vận hành/kinh doanh.
+-- 3. `discussionTopics`: Phân tích và liệt kê các Yêu cầu tính năng (Requirements) khách hàng mong muốn và các Giới hạn/Ràng buộc (Constraints) về ngân sách, thời gian, hạ tầng (nếu có).
+-- 4. `actionItems`: Trích xuất các bước tiếp theo (Next Steps), ví dụ: ai sẽ gửi báo giá, ai làm thiết kế demo, thời gian họp buổi sau.
+--    - BẮT BUỘC định dạng trường `deadline` theo kiểu YYYY-MM-DD. Nếu không nhắc tới hạn cụ thể, bắt buộc trả về chuỗi rỗng "". Không dùng từ tương đối.
+-- 5. Các trường còn lại (`decisionsMade`, `qaPairs`, `prosAndCons`) BẮT BUỘC trả về mảng rỗng [] thay vì bỏ qua hay trả về null.$$,
+--     $${
+--   "type": "object",
+--   "properties": {
+--     "executiveSummary": { "type": "string" },
+--     "discussionTopics": { "type": "array", "items": { "type": "string" } },
+--     "decisionsMade": { "type": "array", "items": { "type": "string" } },
+--     "actionItems": {
+--       "type": "array",
+--       "items": {
+--         "type": "object",
+--         "properties": {
+--           "task": { "type": "string" },
+--           "assignee": { "type": "string" },
+--           "deadline": { "type": "string" }
+--         },
+--         "required": ["task", "assignee", "deadline"]
+--       }
+--     },
+--     "qaPairs": { "type": "array", "items": { "type": "object" } },
+--     "painPoints": { "type": "array", "items": { "type": "string" } },
+--     "prosAndCons": { "type": "array", "items": { "type": "object" } }
+--   },
+--   "required": ["executiveSummary"]
+-- }$$,
+--     true
+-- )
+-- ON CONFLICT (type_code) 
+-- DO UPDATE SET 
+--     system_prompt = EXCLUDED.system_prompt,
+--     json_schema = EXCLUDED.json_schema,
+--     updated_at = CURRENT_TIMESTAMP;
+-- 
+-- -- Prompt 3: Lên Ý Tưởng (BRAINSTORMING)
+-- INSERT INTO prompt_template (type_code, system_prompt, json_schema, is_active)
+-- VALUES (
+--     'BRAINSTORMING',
+--     $$Bạn là một Điều phối viên (Facilitator) sáng tạo. Nhiệm vụ của bạn là tổng hợp các ý tưởng từ buổi động não (brainstorming).
+-- Hãy phân tích và điền vào cấu trúc Master JSON Schema theo các quy tắc sau:
+-- 1. `executiveSummary`: Tóm tắt ngắn gọn về chủ đề cần giải quyết và định hướng chung đạt được sau buổi brainstorming.
+-- 2. `discussionTopics`: Liệt kê tất cả các ý kiến/ý tưởng được đưa ra trong giai đoạn Phân kỳ (Divergent).
+-- 3. `prosAndCons`: Đối với mỗi ý tưởng nổi bật, phân tích Ưu điểm (Pros) & Nhược điểm/Tính khả thi (Cons/Feasibility).
+-- 4. `decisionsMade`: Trích xuất Kết luận cuối cùng ở giai đoạn Hội tụ (Convergent) - những phương án nào được chọn để đi tiếp và phương án nào bị loại bỏ.
+-- 5. Các trường còn lại (`actionItems`, `qaPairs`, `painPoints`) BẮT BUỘC trả về mảng rỗng [] thay vì bỏ qua hay trả về null.$$,
+--     $${
+--   "type": "object",
+--   "properties": {
+--     "executiveSummary": { "type": "string" },
+--     "discussionTopics": { "type": "array", "items": { "type": "string" } },
+--     "decisionsMade": { "type": "array", "items": { "type": "string" } },
+--     "actionItems": { "type": "array", "items": { "type": "object" } },
+--     "qaPairs": { "type": "array", "items": { "type": "object" } },
+--     "painPoints": { "type": "array", "items": { "type": "string" } },
+--     "prosAndCons": {
+--       "type": "array",
+--       "items": {
+--         "type": "object",
+--         "properties": {
+--           "idea": { "type": "string" },
+--           "pros": { "type": "string" },
+--           "cons": { "type": "string" }
+--         },
+--         "required": ["idea", "pros", "cons"]
+--       }
+--     }
+--   },
+--   "required": ["executiveSummary"]
+-- }$$,
+--     true
+-- )
+-- ON CONFLICT (type_code) 
+-- DO UPDATE SET 
+--     system_prompt = EXCLUDED.system_prompt,
+--     json_schema = EXCLUDED.json_schema,
+--     updated_at = CURRENT_TIMESTAMP;
+-- 
+-- -- Prompt 4: Hội Thảo / Đào Tạo (WEBINAR)
+-- INSERT INTO prompt_template (type_code, system_prompt, json_schema, is_active)
+-- VALUES (
+--     'WEBINAR',
+--     $$Bạn là một Trợ lý Học thuật chuyên nghiệp. Nhiệm vụ của bạn là tóm tắt buổi hội thảo, chia sẻ kiến thức hoặc đào tạo nội bộ.
+-- Hãy phân tích và điền vào cấu trúc Master JSON Schema theo các quy tắc sau:
+-- 1. `executiveSummary`: Tóm tắt chung (Summary/Abstract) dài 2-3 câu khái quát nội dung và mục đích chính của buổi chia sẻ.
+-- 2. `discussionTopics`: Liệt kê các Khái niệm/Luận điểm chính (Key Takeaways) kèm theo các Thuật ngữ quan trọng (Key Terms) kèm định nghĩa của chúng được giải thích trong buổi học.
+-- 3. `qaPairs`: Trích xuất đầy đủ các cặp câu hỏi của người tham gia và câu trả lời tương ứng từ diễn giả/giảng viên.
+-- 4. Các trường còn lại (`decisionsMade`, `actionItems`, `painPoints`, `prosAndCons`) BẮT BUỘC trả về mảng rỗng [] thay vì bỏ qua hay trả về null.$$,
+--     $${
+--   "type": "object",
+--   "properties": {
+--     "executiveSummary": { "type": "string" },
+--     "discussionTopics": { "type": "array", "items": { "type": "string" } },
+--     "decisionsMade": { "type": "array", "items": { "type": "string" } },
+--     "actionItems": { "type": "array", "items": { "type": "object" } },
+--     "qaPairs": {
+--       "type": "array",
+--       "items": {
+--         "type": "object",
+--         "properties": {
+--           "question": { "type": "string" },
+--           "answer": { "type": "string" }
+--         },
+--         "required": ["question", "answer"]
+--       }
+--     },
+--     "painPoints": { "type": "array", "items": { "type": "string" } },
+--     "prosAndCons": { "type": "array", "items": { "type": "object" } }
+--   },
+--   "required": ["executiveSummary"]
+-- }$$,
+--     true
+-- )
+-- ON CONFLICT (type_code) 
+-- DO UPDATE SET 
+--     system_prompt = EXCLUDED.system_prompt,
+--     json_schema = EXCLUDED.json_schema,
+--     updated_at = CURRENT_TIMESTAMP;
+-- 
+-- -- Prompt 5: Phỏng Vấn / Đánh Giá (INTERVIEW)
+-- INSERT INTO prompt_template (type_code, system_prompt, json_schema, is_active)
+-- VALUES (
+--     'INTERVIEW',
+--     $$Bạn là một Chuyên gia Nhân sự (HRBP) chuyên nghiệp. Nhiệm vụ của bạn là tóm tắt cuộc họp phỏng vấn tuyển dụng hoặc đánh giá hiệu suất 1-1.
+-- Hãy phân tích và điền vào cấu trúc Master JSON Schema theo các quy tắc sau:
+-- 1. `executiveSummary`: Đánh giá hiệu suất chung (Performance Review) - những gì nhân viên/ứng viên đã làm tốt và chưa tốt trong kỳ qua.
+-- 2. `discussionTopics`: Ghi nhận Phản hồi (Feedback) hai chiều từ phía Quản lý và Nhân viên về môi trường làm việc, khó khăn, đề xuất.
+-- 3. `actionItems`: Thiết lập các Mục tiêu & Hành động tiếp theo (Goals & Next Actions) nhằm phát triển cá nhân trong quý tới.
+--    - BẮT BUỘC định dạng trường `deadline` theo kiểu YYYY-MM-DD. Nếu không nhắc tới hạn cụ thể, bắt buộc trả về chuỗi rỗng "". Không dùng từ tương đối.
+-- 4. Các trường còn lại (`decisionsMade`, `qaPairs`, `painPoints`, `prosAndCons`) BẮT BUỘC trả về mảng rỗng [] thay vì bỏ qua hay trả về null.$$,
+--     $${
+--   "type": "object",
+--   "properties": {
+--     "executiveSummary": { "type": "string" },
+--     "discussionTopics": { "type": "array", "items": { "type": "string" } },
+--     "decisionsMade": { "type": "array", "items": { "type": "string" } },
+--     "actionItems": {
+--       "type": "array",
+--       "items": {
+--         "type": "object",
+--         "properties": {
+--           "task": { "type": "string" },
+--           "assignee": { "type": "string" },
+--           "deadline": { "type": "string" }
+--         },
+--         "required": ["task", "assignee", "deadline"]
+--       }
+--     },
+--     "qaPairs": { "type": "array", "items": { "type": "object" } },
+--     "painPoints": { "type": "array", "items": { "type": "string" } },
+--     "prosAndCons": { "type": "array", "items": { "type": "object" } }
+--   },
+--   "required": ["executiveSummary"]
+-- }$$,
+--     true
+-- )
+-- ON CONFLICT (type_code) 
+-- DO UPDATE SET 
+--     system_prompt = EXCLUDED.system_prompt,
+--     json_schema = EXCLUDED.json_schema,
+--     updated_at = CURRENT_TIMESTAMP;
+-- 
+-- -- Prompt 6: Tiêu Chuẩn / Cơ Bản (GENERAL)
+-- INSERT INTO prompt_template (type_code, system_prompt, json_schema, is_active)
+-- VALUES (
+--     'GENERAL',
+--     $$Bạn là một Thư ký Cuộc họp chuyên nghiệp. Nhiệm vụ của bạn là ghi lại biên bản cuộc họp tiêu chuẩn một cách trung thực và khách quan.
+-- Hãy phân tích và điền vào cấu trúc Master JSON Schema theo các quy tắc sau:
+-- 1. `executiveSummary`: Tóm tắt khái quát (2-3 câu) về mục đích chính và kết quả chung của cuộc họp.
+-- 2. `discussionTopics`: Tóm tắt các chủ đề thảo luận chính (Key Discussion Points) dưới dạng danh sách các ý chính.
+-- 3. `decisionsMade`: Liệt kê các quyết định quan trọng đã được toàn thể cuộc họp thống nhất chốt lại.
+-- 4. `actionItems`: Trích xuất danh sách công việc cần theo dõi (Nhiệm vụ + Người phụ trách + Hạn hoàn thành).
+--    - BẮT BUỘC định dạng trường `deadline` theo kiểu YYYY-MM-DD. Nếu không nhắc tới hạn cụ thể, bắt buộc trả về chuỗi rỗng "". Không dùng từ tương đối.
+-- 5. Các trường còn lại (`qaPairs`, `painPoints`, `prosAndCons`) BẮT BUỘC trả về mảng rỗng [] thay vì bỏ qua hay trả về null.$$,
+--     $${
+--   "type": "object",
+--   "properties": {
+--     "executiveSummary": { "type": "string" },
+--     "discussionTopics": { "type": "array", "items": { "type": "string" } },
+--     "decisionsMade": { "type": "array", "items": { "type": "string" } },
+--     "actionItems": {
+--       "type": "array",
+--       "items": {
+--         "type": "object",
+--         "properties": {
+--           "task": { "type": "string" },
+--           "assignee": { "type": "string" },
+--           "deadline": { "type": "string" }
+--         },
+--         "required": ["task", "assignee", "deadline"]
+--       }
+--     },
+--     "qaPairs": { "type": "array", "items": { "type": "object" } },
+--     "painPoints": { "type": "array", "items": { "type": "string" } },
+--     "prosAndCons": { "type": "array", "items": { "type": "object" } }
+--   },
+--   "required": ["executiveSummary"]
+-- }$$,
+--     true
+-- )
+-- ON CONFLICT (type_code) 
+-- DO UPDATE SET 
+--     system_prompt = EXCLUDED.system_prompt,
+--     json_schema = EXCLUDED.json_schema,
+--     updated_at = CURRENT_TIMESTAMP;
+-- 
+-- -- 3. Cập nhật bảng rooms bổ sung cột type_code
+-- ALTER TABLE rooms ADD COLUMN IF NOT EXISTS type_code VARCHAR(50) DEFAULT 'GENERAL';
+-- 
