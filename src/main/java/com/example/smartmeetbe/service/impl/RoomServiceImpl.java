@@ -3,6 +3,7 @@ package com.example.smartmeetbe.service.impl;
 import com.example.smartmeetbe.config.LiveKitConfig;
 import com.example.smartmeetbe.constant.ErrorCode;
 import com.example.smartmeetbe.constant.JoinRoomStatus;
+import com.example.smartmeetbe.constant.MeetingType;
 import com.example.smartmeetbe.constant.Role;
 import com.example.smartmeetbe.constant.RoomStatus;
 import com.example.smartmeetbe.dto.mapper.RoomMapper;
@@ -100,6 +101,7 @@ public class RoomServiceImpl implements RoomService {
                 .roomCode(generateUniqueRoomCode())
                 .expiresAt(LocalDateTime.now().plusMinutes(durationMinutes))
                 .participants(new ArrayList<>(List.of(host)))
+                .typeCode(request.getTypeCode() != null ? request.getTypeCode() : MeetingType.GENERAL)
                 .build();
 
         roomRepository.save(room);
@@ -366,6 +368,7 @@ public class RoomServiceImpl implements RoomService {
                     .expiresAt(startAt.plusMinutes(durationMinutes))
                     .participants(new ArrayList<>(List.of(host)))
                     .recurrenceRule(occurrences > 1 ? recurrenceRule : null)
+                    .typeCode(request.getTypeCode() != null ? request.getTypeCode() : MeetingType.GENERAL)
                     .build();
 
             roomRepository.save(room);

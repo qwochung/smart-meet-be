@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8" />
+    <title>Báo Cáo Toạ Đàm / Webinar</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 20mm 15mm 20mm 15mm;
+            @bottom-right {
+                content: "Trang " counter(page) " / " counter(pages);
+                font-family: 'Roboto', sans-serif;
+                font-size: 9pt;
+                color: #64748b;
+            }
+        }
+        body {
+            font-family: 'Roboto', sans-serif;
+            color: #1e293b;
+            line-height: 1.6;
+            font-size: 10.5pt;
+        }
+        .header {
+            border-bottom: 2px solid #0f172a;
+            padding-bottom: 15px;
+            margin-bottom: 25px;
+        }
+        .title {
+            font-size: 24pt;
+            font-weight: bold;
+            color: #0369a1;
+            margin: 0 0 8px 0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .subtitle {
+            font-size: 13pt;
+            color: #475569;
+            margin: 0 0 15px 0;
+            font-weight: normal;
+        }
+        .meta-container {
+            background-color: #f0f9ff;
+            border-left: 4px solid #0284c7;
+            padding: 12px 18px;
+            margin-bottom: 25px;
+            border-radius: 0 6px 6px 0;
+        }
+        .meta-grid {
+            width: 100%;
+        }
+        .meta-grid td {
+            padding: 4px 0;
+            font-size: 10pt;
+            color: #334155;
+            vertical-align: top;
+        }
+        .meta-label {
+            font-weight: bold;
+            width: 120px;
+            color: #1e293b;
+        }
+        .section-title {
+            font-size: 14pt;
+            font-weight: bold;
+            color: #0369a1;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 6px;
+            margin-top: 25px;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        p {
+            margin: 0 0 12px 0;
+            text-align: justify;
+        }
+        ul, ol {
+            margin: 0 0 15px 0;
+            padding-left: 20px;
+        }
+        li {
+            margin-bottom: 6px;
+        }
+        .qa-container {
+            margin-top: 15px;
+        }
+        .qa-item {
+            margin-bottom: 20px;
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 15px;
+        }
+        .question {
+            font-weight: bold;
+            color: #0369a1;
+            margin-bottom: 8px;
+            font-size: 11pt;
+        }
+        .answer {
+            color: #334155;
+            padding-left: 10px;
+            border-left: 2px solid #cbd5e1;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1 class="title">Báo Cáo Hội Thảo Trực Tuyến</h1>
+        <h2 class="subtitle" th:text="${meetingName}">Webinar / Toạ Đàm Báo Cáo</h2>
+        
+        <div class="meta-container">
+            <table class="meta-grid">
+                <tr>
+                    <td class="meta-label">Thời gian:</td>
+                    <td th:text="${meetingDate}">24/06/2026</td>
+                </tr>
+                <tr>
+                    <td class="meta-label">Diễn giả chính:</td>
+                    <td th:text="${hostName}">Chưa cập nhật</td>
+                </tr>
+                <tr>
+                    <td class="meta-label">Thành phần tham gia:</td>
+                    <td th:text="${#strings.listJoin(attendees, ', ')}">User A, User B</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <!-- Tóm tắt tổng quan -->
+    <div class="section-title">Nội Dung Tổng Quan (Executive Summary)</div>
+    <p th:text="${summary.executiveSummary}">Tóm tắt cốt lõi các nội dung chính chia sẻ trong hội thảo...</p>
+
+    <!-- Các nội dung trình bày thảo luận -->
+    <div th:if="${summary.discussionTopics != null and !summary.discussionTopics.isEmpty()}">
+        <div class="section-title">Chủ Đề Trình Bày (Discussion Topics)</div>
+        <ul>
+            <li th:each="topic : ${summary.discussionTopics}" th:text="${topic}">Chủ đề thảo luận...</li>
+        </ul>
+    </div>
+
+    <!-- Hỏi đáp (Q&A) -->
+    <div th:if="${summary.qaPairs != null and !summary.qaPairs.isEmpty()}">
+        <div class="section-title">Phiên Hỏi và Đáp (Q và A Session)</div>
+        <div class="qa-container">
+            <div class="qa-item" th:each="qa : ${summary.qaPairs}">
+                <div class="question">
+                    <span>Hỏi: </span>
+                    <span th:text="${qa.question}">Nội dung câu hỏi?</span>
+                </div>
+                <div class="answer">
+                    <span>Đáp: </span>
+                    <span th:text="${qa.answer}">Nội dung câu trả lời...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

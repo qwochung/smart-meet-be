@@ -1,5 +1,6 @@
 package com.example.smartmeetbe.entity;
 
+import com.example.smartmeetbe.constant.MeetingType;
 import com.example.smartmeetbe.constant.RoomStatus;
 import jakarta.persistence.*;
 import lombok.*;
@@ -55,4 +56,8 @@ public class Room extends BaseEntity {
     // Nhãn lặp lịch (vd "Lặp hằng tuần"); null nếu là cuộc họp đơn lẻ
     @Column(name = "recurrence_rule")
     String recurrenceRule;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "type_code", length = 50)
+    MeetingType typeCode;
 }

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8" />
+    <title>Biên Bản Cuộc Họp Chung</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 20mm 15mm 20mm 15mm;
+            @bottom-right {
+                content: "Trang " counter(page) " / " counter(pages);
+                font-family: 'Roboto', sans-serif;
+                font-size: 9pt;
+                color: #64748b;
+            }
+        }
+        body {
+            font-family: 'Roboto', sans-serif;
+            color: #1e293b;
+            line-height: 1.6;
+            font-size: 10.5pt;
+        }
+        .header {
+            border-bottom: 2px solid #0f172a;
+            padding-bottom: 15px;
+            margin-bottom: 25px;
+        }
+        .title {
+            font-size: 24pt;
+            font-weight: bold;
+            color: #1e3a8a;
+            margin: 0 0 8px 0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .subtitle {
+            font-size: 13pt;
+            color: #475569;
+            margin: 0 0 15px 0;
+            font-weight: normal;
+        }
+        .meta-container {
+            background-color: #f8fafc;
+            border-left: 4px solid #3b82f6;
+            padding: 12px 18px;
+            margin-bottom: 25px;
+            border-radius: 0 6px 6px 0;
+        }
+        .meta-grid {
+            width: 100%;
+        }
+        .meta-grid td {
+            padding: 4px 0;
+            font-size: 10pt;
+            color: #334155;
+            vertical-align: top;
+        }
+        .meta-label {
+            font-weight: bold;
+            width: 120px;
+            color: #1e293b;
+        }
+        .section-title {
+            font-size: 14pt;
+            font-weight: bold;
+            color: #1e3a8a;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 6px;
+            margin-top: 25px;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        p {
+            margin: 0 0 12px 0;
+            text-align: justify;
+        }
+        ul, ol {
+            margin: 0 0 15px 0;
+            padding-left: 20px;
+        }
+        li {
+            margin-bottom: 6px;
+        }
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        .table th, .table td {
+            border: 1px solid #cbd5e1;
+            padding: 10px 12px;
+            text-align: left;
+            font-size: 9.5pt;
+        }
+        .table th {
+            background-color: #f1f5f9;
+            color: #0f172a;
+            font-weight: bold;
+        }
+        .table tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+        .badge {
+            background-color: #dbeafe;
+            color: #1e40af;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 8.5pt;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1 class="title">Biên Bản Cuộc Họp</h1>
+        <h2 class="subtitle" th:text="${meetingName}">Tên Cuộc Họp Mặc Định</h2>
+        
+        <div class="meta-container">
+            <table class="meta-grid">
+                <tr>
+                    <td class="meta-label">Thời gian:</td>
+                    <td th:text="${meetingDate}">24/06/2026</td>
+                </tr>
+                <tr>
+                    <td class="meta-label">Người chủ trì:</td>
+                    <td th:text="${hostName}">Chưa cập nhật</td>
+                </tr>
+                <tr>
+                    <td class="meta-label">Thành viên:</td>
+                    <td th:text="${#strings.listJoin(attendees, ', ')}">User A, User B</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <!-- Tóm tắt tổng quan -->
+    <div class="section-title">Tóm Tắt Tổng Quan (Executive Summary)</div>
+    <p th:text="${summary.executiveSummary}">Nội dung tóm tắt tổng quan từ AI...</p>
+
+    <!-- Chủ đề thảo luận -->
+    <div th:if="${summary.discussionTopics != null and !summary.discussionTopics.isEmpty()}">
+        <div class="section-title">Các Nội Dung Thảo Luận (Discussion Topics)</div>
+        <ul>
+            <li th:each="topic : ${summary.discussionTopics}" th:text="${topic}">Chủ đề thảo luận...</li>
+        </ul>
+    </div>
+
+    <!-- Quyết định thống nhất -->
+    <div th:if="${summary.decisionsMade != null and !summary.decisionsMade.isEmpty()}">
+        <div class="section-title">Quyết Định Đạt Được (Decisions Made)</div>
+        <ul>
+            <li th:each="decision : ${summary.decisionsMade}" th:text="${decision}">Quyết định thống nhất...</li>
+        </ul>
+    </div>
+
+    <!-- Nhiệm vụ phân công (Action Items) -->
+    <div th:if="${summary.actionItems != null and !summary.actionItems.isEmpty()}">
+        <div class="section-title">Hành Động và Phân Công (Action Items)</div>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th style="width: 55%;">Nhiệm vụ</th>
+                    <th style="width: 25%;">Người phụ trách</th>
+                    <th style="width: 20%;">Hạn hoàn thành</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr th:each="item : ${summary.actionItems}">
+                    <td th:text="${item.task}">Tên task</td>
+                    <td th:text="${item.assignee}">Assignee</td>
+                    <td>
+                        <span class="badge" th:text="${item.deadline != null and !item.deadline.isEmpty() ? item.deadline : 'Không có'}">Deadline</span>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

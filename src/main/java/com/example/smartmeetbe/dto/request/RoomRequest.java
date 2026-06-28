@@ -11,4 +11,5 @@ public class RoomRequest {
     String name;
     String description;
     LocalDateTime scheduledAt;
+    com.example.smartmeetbe.constant.MeetingType typeCode;
 }
