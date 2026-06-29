@@ -87,6 +87,12 @@ public class MeetingFinalizationServiceImpl implements MeetingFinalizationServic
                 log.info("Generating dynamic AI summary for room {}...", roomId);
                 Room room = roomRepository.findByRoomCode(roomId).orElse(null);
                 MeetingType typeCode = (room != null && room.getTypeCode() != null) ? room.getTypeCode() : MeetingType.GENERAL;
+
+                // Chốt thời điểm kết thúc thực tế để tính thời lượng cuộc họp
+                if (room != null && room.getActualEndedAt() == null) {
+                    room.setActualEndedAt(LocalDateTime.now());
+                    roomRepository.save(room);
+                }
                 
                 MeetingSummaryStrategy strategy = meetingSummaryContext.getStrategy(typeCode);
                 MasterMeetingSummaryDto summaryDto = strategy.generateSummary(roomId, result.fullText());

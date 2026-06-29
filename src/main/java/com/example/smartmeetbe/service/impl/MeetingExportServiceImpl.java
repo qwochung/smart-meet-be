@@ -5,6 +5,7 @@ import com.example.smartmeetbe.entity.Room;
 import com.example.smartmeetbe.entity.User;
 import com.example.smartmeetbe.repository.RoomRepository;
 import com.example.smartmeetbe.repository.mongo.MeetingSummaryRepository;
+import com.example.smartmeetbe.service.DocxExportService;
 import com.example.smartmeetbe.service.MeetingExportService;
 import com.example.smartmeetbe.service.PdfExportService;
 import lombok.RequiredArgsConstructor;
@@ -27,22 +28,42 @@ public class MeetingExportServiceImpl implements MeetingExportService {
     private final RoomRepository roomRepository;
     private final MeetingSummaryRepository meetingSummaryRepository;
     private final PdfExportService pdfExportService;
+    private final DocxExportService docxExportService;
 
     @Override
     public byte[] exportSummaryPdf(String roomId) throws Exception {
-        // 1. Tìm thông tin phòng họp từ Postgres
-        Room room = roomRepository.findByRoomCode(roomId)
+        Room room = loadRoom(roomId);
+        Map<String, Object> templateData = buildTemplateData(room, loadSummary(roomId));
+        String templateName = resolveTemplateName(room);
+
+        log.info("Generating PDF report in Service for room {} using template type {}", roomId, templateName);
+        return pdfExportService.generateMeetingPdf(templateName, templateData);
+    }
+
+    @Override
+    public byte[] exportSummaryDocx(String roomId) throws Exception {
+        Room room = loadRoom(roomId);
+        Map<String, Object> templateData = buildTemplateData(room, loadSummary(roomId));
+
+        log.info("Generating DOCX report in Service for room {}", roomId);
+        return docxExportService.generateMeetingDocx(templateData);
+    }
+
+    private Room loadRoom(String roomId) {
+        return roomRepository.findByRoomCode(roomId)
                 .orElseThrow(() -> new IllegalArgumentException("Room not found with code: " + roomId));
+    }
 
-        // 2. Tìm thông tin tóm tắt từ MongoDB
-        MeetingSummary summary = meetingSummaryRepository.findByRoomId(roomId)
+    private MeetingSummary loadSummary(String roomId) {
+        return meetingSummaryRepository.findByRoomId(roomId)
                 .orElseThrow(() -> new IllegalStateException("Meeting summary not generated yet for room: " + roomId));
+    }
 
-        // 3. Gộp metadata và dữ liệu tóm tắt vào Map
+    /** Gộp metadata phòng họp và dữ liệu tóm tắt AI vào Map dùng chung cho PDF lẫn DOCX. */
+    private Map<String, Object> buildTemplateData(Room room, MeetingSummary summary) {
         Map<String, Object> templateData = new HashMap<>();
         templateData.put("meetingName", room.getName());
 
-        // Định dạng ngày họp
         LocalDateTime date = (room.getScheduledAt() != null) ? room.getScheduledAt() : room.getCreatedAt();
         if (date == null) {
             date = LocalDateTime.now();
@@ -50,7 +71,6 @@ public class MeetingExportServiceImpl implements MeetingExportService {
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
         templateData.put("meetingDate", date.format(formatter));
 
-        // Người chủ trì và thành viên
         User host = room.getHostUser();
         templateData.put("hostName", (host != null) ? host.getName() : "Chưa cập nhật");
 
@@ -59,35 +79,26 @@ public class MeetingExportServiceImpl implements MeetingExportService {
                 : List.of();
         templateData.put("attendees", attendees);
 
-        // Dữ liệu tóm tắt AI
         templateData.put("summary", summary);
+        return templateData;
+    }
 
-        // 4. Chọn loại template tương ứng dựa trên typeCode của phòng họp
+    /** Chọn template PDF tương ứng dựa trên typeCode của phòng họp. */
+    private String resolveTemplateName(Room room) {
         String meetingType = (room.getTypeCode() != null) ? room.getTypeCode().name() : "GENERAL";
-
-        String templateName;
         switch (meetingType) {
             case "SCRUM_SYNC":
-                templateName = "scrum";
-                break;
+                return "scrum";
             case "CLIENT_SALES":
-                templateName = "client";
-                break;
+                return "client";
             case "BRAINSTORMING":
-                templateName = "brainstorming";
-                break;
+                return "brainstorming";
             case "WEBINAR":
-                templateName = "webinar";
-                break;
+                return "webinar";
             case "INTERVIEW":
-                templateName = "interview";
-                break;
+                return "interview";
             default:
-                templateName = "general";
-                break;
+                return "general";
         }
-
-        log.info("Generating PDF report in Service for room {} using template type {}", roomId, templateName);
-        return pdfExportService.generateMeetingPdf(templateName, templateData);
     }
 }
