@@ -73,6 +73,12 @@ public class JoinRoomServiceImpl implements JoinRoomService {
         User user = userService.findByEmail(userEmail);
         boolean isHost = room.getHostUser().getId().equals(user.getId());
 
+        // Ghi nhận thời điểm bắt đầu thực tế của cuộc họp ở lần tham gia đầu tiên
+        if (room.getActualStartedAt() == null) {
+            room.setActualStartedAt(LocalDateTime.now());
+            roomRepository.save(room);
+        }
+
         if (isHost) {
             return buildTokenResponse(room, user, Role.HOST);
         }

@@ -53,6 +53,13 @@ public class Room extends BaseEntity {
     LocalDateTime scheduledAt;
     LocalDateTime expiresAt;
 
+    // Thời điểm bắt đầu / kết thúc thực tế của cuộc họp, dùng để tính thời lượng thật cho biên bản
+    @Column(name = "actual_started_at")
+    LocalDateTime actualStartedAt;
+
+    @Column(name = "actual_ended_at")
+    LocalDateTime actualEndedAt;
+
     // Nhãn lặp lịch (vd "Lặp hằng tuần"); null nếu là cuộc họp đơn lẻ
     @Column(name = "recurrence_rule")
     String recurrenceRule;
