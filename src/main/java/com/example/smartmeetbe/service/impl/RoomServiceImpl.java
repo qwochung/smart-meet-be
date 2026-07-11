@@ -33,7 +33,10 @@ import org.springframework.transaction.annotation.Transactional;
 import com.example.smartmeetbe.document.MeetingSummary;
 import com.example.smartmeetbe.document.RoomTranscript;
 import com.example.smartmeetbe.dto.response.RoomMinuteResponse;
+import com.example.smartmeetbe.dto.response.PageResponse;
 import com.example.smartmeetbe.dto.response.DashboardResponse;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import com.example.smartmeetbe.repository.mongo.MeetingSummaryRepository;
 import com.example.smartmeetbe.repository.mongo.RoomTranscriptRepository;
 
@@ -64,6 +67,7 @@ public class RoomServiceImpl implements RoomService {
     private final JoinRoomRepository joinRoomRepository;
     final MeetingSummaryRepository meetingSummaryRepository;
     final RoomTranscriptRepository roomTranscriptRepository;
+    private final com.example.smartmeetbe.service.MeetingFinalizationService meetingFinalizationService;
 
     @Value("${app.room.max-participants}")
     private int maxParticipants;
@@ -90,7 +94,8 @@ public class RoomServiceImpl implements RoomService {
 
         User host = userService.findByEmail(hostEmail);
 
-        // 2. Tạo room trong DB
+        // 2. Tạo room trong DB — phòng hẹn giờ tính hết hạn từ scheduledAt, không phải từ lúc tạo
+        LocalDateTime startBase = request.getScheduledAt() != null ? request.getScheduledAt() : LocalDateTime.now();
         Room room = Room.builder()
                 .name(request.getName())
                 .description(request.getDescription())
@@ -99,7 +104,7 @@ public class RoomServiceImpl implements RoomService {
                 .status(request.getScheduledAt() == null ? RoomStatus.ACTIVE : RoomStatus.WAITING)
                 .scheduledAt(request.getScheduledAt())
                 .roomCode(generateUniqueRoomCode())
-                .expiresAt(LocalDateTime.now().plusMinutes(durationMinutes))
+                .expiresAt(startBase.plusMinutes(durationMinutes))
                 .participants(new ArrayList<>(List.of(host)))
                 .typeCode(request.getTypeCode() != null ? request.getTypeCode() : MeetingType.GENERAL)
                 .build();
@@ -117,7 +122,8 @@ public class RoomServiceImpl implements RoomService {
 
         // 4. Khởi tạo counter Redis: host đang trong phòng = 1
         String redisKey = ROOM_PARTICIPANT_KEY + room.getRoomCode();
-        redisTemplate.opsForValue().set(redisKey, "1", durationMinutes, TimeUnit.MINUTES);
+        // TTL dư 30 phút so với thời lượng phòng để counter không biến mất giữa buổi họp
+        redisTemplate.opsForValue().set(redisKey, "1", durationMinutes + 30L, TimeUnit.MINUTES);
 
         log.info("Room created: {} by host: {}", room.getRoomCode(), hostEmail);
 
@@ -149,24 +155,49 @@ public class RoomServiceImpl implements RoomService {
 
     @Override
     public RoomResponse getRoomByCode(String code) {
-        Room room = roomRepository.findByRoomCodeAndStatus(code, RoomStatus.ACTIVE)
-                .orElseThrow(() -> new RuntimeException("Room not found"));
+        Room room = roomRepository.findByRoomCode(code)
+                .filter(r -> r.getStatus() != RoomStatus.ENDED)
+                .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
         return roomMapper.toResponse(room);
     }
 
     @Override
     public Room findByRoomCodeAndStatus(String code, RoomStatus roomStatus) {
         return roomRepository.findByRoomCodeAndStatus(code, roomStatus)
-                .orElseThrow(() -> new RuntimeException("Room not found"));
+                .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
     }
 
     @Override
-    public List<RoomMinuteResponse> getRoomMinutesForUser(String userEmail, String name, String dateStr) {
+    @Transactional
+    public void endRoom(String roomCode, String hostEmail) {
+        Room room = roomRepository.findByRoomCode(roomCode)
+                .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
+
+        if (!room.getHostUser().getEmail().equals(hostEmail)) {
+            throw new AppException(ErrorCode.FORBIDDEN);
+        }
+        if (room.getStatus() == RoomStatus.ENDED) {
+            return; // idempotent: bấm kết thúc 2 lần không lỗi
+        }
+
+        room.setStatus(RoomStatus.ENDED);
+        if (room.getActualEndedAt() == null) {
+            room.setActualEndedAt(LocalDateTime.now());
+        }
+        roomRepository.save(room);
+
+        redisTemplate.delete(ROOM_PARTICIPANT_KEY + roomCode);
+        meetingFinalizationService.finalizeAsync(roomCode);
+        log.info("Room {} ended by host {}", roomCode, hostEmail);
+    }
+
+    @Override
+    public PageResponse<RoomMinuteResponse> getRoomMinutesForUser(String userEmail, String name, String dateStr, int page, int size) {
         User user = userService.findByEmail(userEmail);
-        
+
         LocalDateTime startDate = null;
         LocalDateTime endDate = null;
-        
+
         if (dateStr != null && !dateStr.isBlank()) {
             try {
                 java.time.LocalDate date = java.time.LocalDate.parse(dateStr);
@@ -176,24 +207,30 @@ public class RoomServiceImpl implements RoomService {
                 log.warn("Invalid date format: {}", dateStr);
             }
         }
-        
+
         String searchName = (name != null && !name.isBlank()) ? name : null;
-        
-        List<Room> rooms = roomRepository.findRoomsForUser(user.getId(), searchName, startDate, endDate);
-        
-        List<RoomMinuteResponse> responseList = new ArrayList<>();
-        for (Room room : rooms) {
-            responseList.add(RoomMinuteResponse.builder()
-                    .roomCode(room.getRoomCode())
-                    .name(room.getName())
-                    .description(room.getDescription())
-                    .scheduledAt(room.getScheduledAt())
-                    .expiresAt(room.getExpiresAt())
-                    .status(room.getStatus())
-                    .recurrenceRule(room.getRecurrenceRule())
-                    .build());
-        }
-        return responseList;
+
+        int safePage = Math.max(0, page);
+        int safeSize = Math.min(Math.max(1, size), 100);
+
+        Page<Room> roomPage = roomRepository.findRoomsForUserPaged(
+                user.getId(), searchName, startDate, endDate,
+                PageRequest.of(safePage, safeSize));
+
+        List<RoomMinuteResponse> items = roomPage.getContent().stream()
+                .map(room -> RoomMinuteResponse.builder()
+                        .roomCode(room.getRoomCode())
+                        .name(room.getName())
+                        .description(room.getDescription())
+                        .scheduledAt(room.getScheduledAt())
+                        .expiresAt(room.getExpiresAt())
+                        .status(room.getStatus())
+                        .recurrenceRule(room.getRecurrenceRule())
+                        .build())
+                .collect(Collectors.toList());
+
+        return new PageResponse<>(items, safePage, safeSize,
+                roomPage.getTotalElements(), roomPage.getTotalPages());
     }
 
     @Override
@@ -300,7 +337,7 @@ public class RoomServiceImpl implements RoomService {
         List<DashboardResponse.MeetingItem> recentMinutes = rooms.stream()
                 .filter(r -> r.getStatus() == RoomStatus.ENDED)
                 .sorted(Comparator.comparing(
-                        Room::getExpiresAt,
+                        (Room r) -> r.getActualEndedAt() != null ? r.getActualEndedAt() : r.getExpiresAt(),
                         Comparator.nullsLast(Comparator.reverseOrder())))
                 .limit(5)
                 .map(r -> DashboardResponse.MeetingItem.builder()

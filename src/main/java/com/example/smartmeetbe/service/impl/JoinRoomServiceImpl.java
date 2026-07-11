@@ -62,8 +62,12 @@ public class JoinRoomServiceImpl implements JoinRoomService {
     @Transactional
     @Override
     public JoinRoomResponse joinRoom(JoinRoomRequest request, String userEmail) {
-        Room room = roomRepository.findByRoomCodeAndStatus(request.getRoomCode(), RoomStatus.ACTIVE)
+        Room room = roomRepository.findByRoomCode(request.getRoomCode())
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
+
+        if (room.getStatus() == RoomStatus.ENDED) {
+            throw new AppException(ErrorCode.ROOM_NOT_FOUND);
+        }
 
         if (room.getExpiresAt() != null && LocalDateTime.now().isAfter(room.getExpiresAt())) {
             expireRoom(room);
@@ -73,17 +77,27 @@ public class JoinRoomServiceImpl implements JoinRoomService {
         User user = userService.findByEmail(userEmail);
         boolean isHost = room.getHostUser().getId().equals(user.getId());
 
+        // Phòng hẹn giờ (WAITING): host vào sẽ kích hoạt phòng, người khác phải chờ
+        if (room.getStatus() == RoomStatus.WAITING) {
+            if (!isHost) {
+                throw new AppException(ErrorCode.ROOM_NOT_STARTED);
+            }
+            room.setStatus(RoomStatus.ACTIVE);
+            String redisKey = ROOM_PARTICIPANT_KEY + room.getRoomCode();
+            long ttlMinutes = Math.max(durationMinutes, Duration.between(LocalDateTime.now(), room.getExpiresAt()).toMinutes()) + 30;
+            redisTemplate.opsForValue().set(redisKey, "1", Duration.ofMinutes(ttlMinutes));
+            log.info("Scheduled room {} activated by host {}", room.getRoomCode(), userEmail);
+        }
+
         // Ghi nhận thời điểm bắt đầu thực tế của cuộc họp ở lần tham gia đầu tiên
         if (room.getActualStartedAt() == null) {
             room.setActualStartedAt(LocalDateTime.now());
-            roomRepository.save(room);
         }
+        roomRepository.save(room);
 
         if (isHost) {
             return buildTokenResponse(room, user, Role.HOST);
         }
-
-        enforceMaxParticipants(room.getRoomCode());
 
         JoinRoom joinRoom = joinRoomRepository
                 .findByRoomIdAndUserId(room.getId(), user.getId())
@@ -92,6 +106,11 @@ public class JoinRoomServiceImpl implements JoinRoomService {
                         .user(user)
                         .role(Role.PARTICIPANT)
                         .build());
+
+        // Người đã được duyệt trước đó (vd. refresh trang) vào lại luôn, không cần duyệt lại
+        if (joinRoom.getStatus() == JoinRoomStatus.APPROVED) {
+            return buildTokenResponse(room, user, Role.PARTICIPANT);
+        }
 
         joinRoom.setStatus(JoinRoomStatus.PENDING);
         joinRoomRepository.save(joinRoom);
@@ -127,6 +146,9 @@ public class JoinRoomServiceImpl implements JoinRoomService {
         if (joinRoom.getStatus() != JoinRoomStatus.PENDING) {
             throw new AppException(ErrorCode.INVALID_REQUEST);
         }
+
+        // Sức chứa phòng chỉ tính người ĐÃ được duyệt — kiểm tra và tăng counter tại đây
+        enforceMaxParticipants(room.getRoomCode());
 
         joinRoom.setStatus(JoinRoomStatus.APPROVED);
         joinRoomRepository.save(joinRoom);
@@ -178,8 +200,6 @@ public class JoinRoomServiceImpl implements JoinRoomService {
         joinRoom.setStatus(JoinRoomStatus.REJECTED);
         joinRoomRepository.save(joinRoom);
 
-        redisTemplate.opsForValue().decrement(ROOM_PARTICIPANT_KEY + roomCode);
-
         notifyParticipant(roomCode, participant.getId(), "JOIN_REJECTED", Map.of(
                 "reason", "Host has rejected your request"
         ));
@@ -199,6 +219,15 @@ public class JoinRoomServiceImpl implements JoinRoomService {
         }
 
         try {
+            // Key có thể đã hết TTL giữa buổi họp — seed lại từ DB trước khi tăng
+            if (Boolean.FALSE.equals(redisTemplate.hasKey(countKey))) {
+                long approvedCount = roomRepository.findByRoomCode(roomCode)
+                        .map(r -> 1 + joinRoomRepository.countByRoomIdAndStatus(r.getId(), JoinRoomStatus.APPROVED))
+                        .orElse(1L);
+                redisTemplate.opsForValue().set(countKey, String.valueOf(approvedCount),
+                        Duration.ofMinutes(durationMinutes + 30L));
+            }
+
             Long current = redisTemplate.opsForValue().increment(countKey);
             if (current == null || current > maxParticipants) {
                 redisTemplate.opsForValue().decrement(countKey);
@@ -213,7 +242,10 @@ public class JoinRoomServiceImpl implements JoinRoomService {
         room.setStatus(RoomStatus.ENDED);
         roomRepository.save(room);
         redisTemplate.delete(ROOM_PARTICIPANT_KEY + room.getRoomCode());
-        meetingFinalizationService.finalizeAsync(room.getRoomCode());
+        // Phòng hẹn giờ chưa từng diễn ra thì không có gì để tổng hợp biên bản
+        if (room.getActualStartedAt() != null) {
+            meetingFinalizationService.finalizeAsync(room.getRoomCode());
+        }
     }
 
     private Room getActiveRoom(String roomCode) {

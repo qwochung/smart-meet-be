@@ -36,7 +36,7 @@ public class AudioProcessingServiceImpl implements AudioProcessingService {
     private final DraftTranscriptService draftTranscriptService;
     private final RestTemplate aiRestTemplate;
 
-    @Value("${ai-server.transcribe-url:http://ai-server:8000/transcribe}")
+    @Value("${ai-server.transcribe-url:http://localhost:8000/api/transcribe/chunk}")
     String transcribeUrl;
 
     private static final int MAX_TRANSCRIBE_ATTEMPTS = 3;
@@ -126,6 +126,15 @@ public class AudioProcessingServiceImpl implements AudioProcessingService {
                 lastError = e;
                 log.warn("Transcribe request failed (attempt {}/{}), retrying with a fresh connection: {}",
                         attempt, MAX_TRANSCRIBE_ATTEMPTS, e.getMessage());
+                if (attempt < MAX_TRANSCRIBE_ATTEMPTS) {
+                    try {
+                        // Backoff tăng dần để không dồn thêm tải khi AI server đang quá tải
+                        Thread.sleep(500L * attempt);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw lastError;
+                    }
+                }
             }
         }
         throw lastError;

@@ -8,6 +8,7 @@ import com.example.smartmeetbe.dto.response.ApiResponse;
 import com.example.smartmeetbe.dto.response.JoinRoomResponse;
 import com.example.smartmeetbe.dto.response.RoomResponse;
 import com.example.smartmeetbe.dto.response.DashboardResponse;
+import com.example.smartmeetbe.dto.response.PageResponse;
 import com.example.smartmeetbe.service.JoinRoomService;
 import com.example.smartmeetbe.service.RoomService;
 import com.example.smartmeetbe.utils.SecurityUtil;
@@ -89,6 +90,16 @@ public class RoomController {
                 .build());
     }
 
+    @PostMapping("/{code}/end")
+    public ResponseEntity<ApiResponse<Void>> endRoom(@PathVariable String code) {
+        String hostEmail = SecurityUtil.getCurrentUser();
+        roomService.endRoom(code, hostEmail);
+        return ResponseEntity.ok(ApiResponse.<Void>builder()
+                .success(true)
+                .message("Room ended successfully")
+                .build());
+    }
+
     @PostMapping("/schedule")
     public ResponseEntity<ApiResponse<List<RoomResponse>>> scheduleRecurringMeetings(
             @Valid @RequestBody ScheduleMeetingRequest request) {
@@ -113,12 +124,14 @@ public class RoomController {
     }
 
     @GetMapping("/minutes")
-    public ResponseEntity<ApiResponse<List<RoomMinuteResponse>>> getRoomMinutes(
+    public ResponseEntity<ApiResponse<PageResponse<RoomMinuteResponse>>> getRoomMinutes(
             @RequestParam(required = false) String name,
-            @RequestParam(required = false) String date) {
+            @RequestParam(required = false) String date,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
         String userEmail = SecurityUtil.getCurrentUser();
-        List<RoomMinuteResponse> minutes = roomService.getRoomMinutesForUser(userEmail, name, date);
-        return ResponseEntity.ok(ApiResponse.<List<RoomMinuteResponse>>builder()
+        PageResponse<RoomMinuteResponse> minutes = roomService.getRoomMinutesForUser(userEmail, name, date, page, size);
+        return ResponseEntity.ok(ApiResponse.<PageResponse<RoomMinuteResponse>>builder()
                 .success(true)
                 .message("Room minutes retrieved successfully")
                 .data(minutes)

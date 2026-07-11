@@ -30,6 +30,9 @@ public class GeminiServiceImpl implements GeminiService {
     @Value("${gemini.prompt}")
     private String geminiPrompt;
 
+    @Value("${gemini.doc-summary-prompt:Bạn là trợ lý tóm tắt tài liệu cho cuộc họp. Hãy tóm tắt nội dung chính của tài liệu dưới đây bằng tiếng Việt, tối đa 3-4 câu, tập trung vào mục đích, các điểm chính và kết luận/đề xuất (nếu có). Chỉ trả về nội dung tóm tắt, không thêm lời dẫn.}")
+    private String docSummaryPrompt;
+
     private static final String GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=";
 
     @Override
@@ -91,6 +94,65 @@ public class GeminiServiceImpl implements GeminiService {
         }
 
         return rawTranscript;
+    }
+
+    @Override
+    public String summarizeDocumentText(String documentText) {
+        if (apiKey == null || apiKey.trim().isEmpty() || "YOUR_GEMINI_API_KEY".equals(apiKey)) {
+            log.warn("Gemini API key is not configured. Skipping document summarization.");
+            return null;
+        }
+        if (documentText == null || documentText.trim().isEmpty()) {
+            return null;
+        }
+
+        try {
+            String url = GEMINI_API_URL + apiKey;
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+
+            String fullInputText = docSummaryPrompt + "\n\n" + documentText;
+
+            Map<String, Object> requestBody = Map.of(
+                    "contents", List.of(
+                            Map.of("parts", List.of(Map.of("text", fullInputText)))
+                    )
+            );
+
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+
+            log.info("Sending document summarization request to Gemini API...");
+            ResponseEntity<Map> response = aiRestTemplate.postForEntity(url, entity, Map.class);
+
+            String text = extractFirstCandidateText(response);
+            if (text != null) {
+                log.info("Successfully summarized document using Gemini.");
+                return text;
+            }
+            log.warn("Gemini document summary response could not be parsed.");
+        } catch (Exception e) {
+            log.error("Failed to summarize document using Gemini API: {}", e.getMessage(), e);
+        }
+        return null;
+    }
+
+    @SuppressWarnings("rawtypes")
+    private String extractFirstCandidateText(ResponseEntity<Map> response) {
+        if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+            return null;
+        }
+        Map<String, Object> body = response.getBody();
+        List<?> candidates = (List<?>) body.get("candidates");
+        if (candidates == null || candidates.isEmpty()) return null;
+        Map<?, ?> candidate = (Map<?, ?>) candidates.get(0);
+        Map<?, ?> content = (Map<?, ?>) candidate.get("content");
+        if (content == null) return null;
+        List<?> parts = (List<?>) content.get("parts");
+        if (parts == null || parts.isEmpty()) return null;
+        Map<?, ?> part = (Map<?, ?>) parts.get(0);
+        String text = (String) part.get("text");
+        return (text != null && !text.trim().isEmpty()) ? text.trim() : null;
     }
 
     @Override

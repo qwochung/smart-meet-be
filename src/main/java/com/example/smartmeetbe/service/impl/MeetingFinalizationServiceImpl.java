@@ -124,6 +124,8 @@ public class MeetingFinalizationServiceImpl implements MeetingFinalizationServic
             });
         } finally {
             lock.unlock();
+            // Phòng đã finalize xong thì không giữ lock trong map nữa (tránh leak theo số phòng)
+            roomLocks.remove(roomId, lock);
         }
     }
 

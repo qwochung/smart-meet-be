@@ -2,6 +2,8 @@ package com.example.smartmeetbe.repository;
 
 import com.example.smartmeetbe.constant.RoomStatus;
 import com.example.smartmeetbe.entity.Room;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -43,5 +45,36 @@ public interface RoomRepository extends JpaRepository<Room, Long> {
             @Param("name") String name,
             @Param("startDate") LocalDateTime startDate,
             @Param("endDate") LocalDateTime endDate
+    );
+
+    @Query(value = """
+    SELECT DISTINCT r.*
+    FROM rooms r
+    LEFT JOIN room_participants rp
+        ON r.id = rp.room_id
+    WHERE (r.host_id = :userId OR rp.user_id = :userId)
+      AND (:name IS NULL OR r.name ILIKE CONCAT('%', :name, '%'))
+      AND (CAST(:startDate AS timestamp) IS NULL OR r.expires_at >= :startDate)
+      AND (CAST(:endDate AS timestamp) IS NULL OR r.expires_at <= :endDate)
+    ORDER BY r.expires_at DESC
+    """,
+            countQuery = """
+    SELECT COUNT(DISTINCT r.id)
+    FROM rooms r
+    LEFT JOIN room_participants rp
+        ON r.id = rp.room_id
+    WHERE (r.host_id = :userId OR rp.user_id = :userId)
+      AND (:name IS NULL OR r.name ILIKE CONCAT('%', :name, '%'))
+      AND (CAST(:startDate AS timestamp) IS NULL OR r.expires_at >= :startDate)
+      AND (CAST(:endDate AS timestamp) IS NULL OR r.expires_at <= :endDate)
+    """,
+            nativeQuery = true
+    )
+    Page<Room> findRoomsForUserPaged(
+            @Param("userId") Long userId,
+            @Param("name") String name,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate,
+            Pageable pageable
     );
 }
