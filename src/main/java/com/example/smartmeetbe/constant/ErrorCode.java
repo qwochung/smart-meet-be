@@ -27,6 +27,12 @@ public enum ErrorCode {
     ROOM_EXPIRED("Room has expired", HttpStatus.GONE),
     ROOM_JOIN_CONFLICT("Too many concurrent join requests, please retry", HttpStatus.CONFLICT),
     MAX_ACTIVE_ROOMS_REACHED("Maximum number of active rooms (5) reached", HttpStatus.CONFLICT),
+    ROOM_NOT_STARTED("Meeting has not started yet. Please wait for the host to open the room.", HttpStatus.CONFLICT),
+
+    // Document
+    DOCUMENT_NOT_FOUND("Document not found in this room", HttpStatus.NOT_FOUND),
+    DOCUMENT_INVALID("Invalid document upload", HttpStatus.BAD_REQUEST),
+    NOT_ROOM_PARTICIPANT("You are not a participant of this room", HttpStatus.FORBIDDEN),
 
     // General
     FORBIDDEN("You do not have permission to perform this action", HttpStatus.FORBIDDEN),

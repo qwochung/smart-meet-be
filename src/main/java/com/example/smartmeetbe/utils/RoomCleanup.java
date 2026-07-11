@@ -29,19 +29,32 @@ public class RoomCleanup {
     @Scheduled(fixedDelay = 15 * 60 * 1000)
     @Transactional
     public void cleanupExpiredRooms() {
-        List<Room> expiredRooms = roomRepository
-                .findByStatusAndExpiresAtBefore(RoomStatus.ACTIVE, LocalDateTime.now());
+        LocalDateTime now = LocalDateTime.now();
+        List<Room> expiredActive = roomRepository
+                .findByStatusAndExpiresAtBefore(RoomStatus.ACTIVE, now);
+        // Phòng hẹn giờ không ai mở cũng phải kết thúc, nhưng không cần tổng hợp biên bản
+        List<Room> expiredWaiting = roomRepository
+                .findByStatusAndExpiresAtBefore(RoomStatus.WAITING, now);
 
-        if (expiredRooms.isEmpty()) return;
+        if (expiredActive.isEmpty() && expiredWaiting.isEmpty()) return;
 
-        expiredRooms.forEach(room -> {
+        expiredActive.forEach(room -> {
             room.setStatus(RoomStatus.ENDED);
+            if (room.getActualEndedAt() == null) {
+                room.setActualEndedAt(room.getExpiresAt());
+            }
             redisTemplate.delete("room:participants:" + room.getRoomCode());
             meetingFinalizationService.finalizeAsync(room.getRoomCode());
             log.info("Room expired and cleaned up: {}", room.getRoomCode());
         });
 
-        roomRepository.saveAll(expiredRooms);
-        log.info("Cleaned up {} expired rooms", expiredRooms.size());
+        expiredWaiting.forEach(room -> {
+            room.setStatus(RoomStatus.ENDED);
+            log.info("Scheduled room never started, marked ended: {}", room.getRoomCode());
+        });
+
+        roomRepository.saveAll(expiredActive);
+        roomRepository.saveAll(expiredWaiting);
+        log.info("Cleaned up {} expired rooms", expiredActive.size() + expiredWaiting.size());
     }
 }

@@ -47,4 +47,8 @@ public class Document extends BaseEntity {
 
     @Column(length = 500)
     String description;
+
+    // Tóm tắt AI của tài liệu (sinh bởi Gemini, cache lại để không gọi lặp)
+    @Column(columnDefinition = "TEXT")
+    String summary;
 }

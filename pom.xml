@@ -183,6 +183,13 @@
             <version>5.2.5</version>
         </dependency>
 
+        <!-- POI scratchpad: đọc định dạng cũ .doc / .ppt cho tính năng tóm tắt tài liệu -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-scratchpad</artifactId>
+            <version>5.2.5</version>
+        </dependency>
+
     </dependencies>
 
     <build>

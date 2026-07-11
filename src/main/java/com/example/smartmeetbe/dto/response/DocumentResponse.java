@@ -20,6 +20,7 @@ public class DocumentResponse {
     String category;
     String uploadedBy;
     String description;
+    String summary;
     String fileUrl;
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     LocalDateTime createdAt;

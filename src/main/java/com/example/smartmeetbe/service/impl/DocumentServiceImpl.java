@@ -1,6 +1,7 @@
 package com.example.smartmeetbe.service.impl;
 
 import com.example.smartmeetbe.constant.ErrorCode;
+import com.example.smartmeetbe.dto.response.DocumentDownload;
 import com.example.smartmeetbe.dto.response.DocumentResponse;
 import com.example.smartmeetbe.entity.Document;
 import com.example.smartmeetbe.entity.JoinRoom;
@@ -34,6 +35,8 @@ public class DocumentServiceImpl implements DocumentService {
     final DocumentRepository documentRepository;
     final JoinRoomRepository joinRoomRepository;
     final S3Service s3Service;
+    final DocumentTextExtractor documentTextExtractor;
+    final com.example.smartmeetbe.service.GeminiService geminiService;
     
     @Value("${app.storage.s3.bucket-name}")
     String bucketName;
@@ -57,16 +60,16 @@ public class DocumentServiceImpl implements DocumentService {
         
         // 3. Validate file count
         if (files == null || files.isEmpty()) {
-            throw new RuntimeException("No files provided");
+            throw new AppException(ErrorCode.DOCUMENT_INVALID);
         }
         if (files.size() > MAX_FILES_PER_UPLOAD) {
-            throw new RuntimeException("Maximum " + MAX_FILES_PER_UPLOAD + " files allowed per upload");
+            throw new AppException(ErrorCode.DOCUMENT_INVALID);
         }
-        
+
         // 4. Check total documents count
         long currentDocCount = documentRepository.countByRoomId(room.getId());
         if (currentDocCount + files.size() > 100) { // reasonable limit
-            throw new RuntimeException("Document limit exceeded for this room");
+            throw new AppException(ErrorCode.DOCUMENT_INVALID);
         }
         
         List<DocumentResponse> uploadedDocuments = new ArrayList<>();
@@ -85,12 +88,12 @@ public class DocumentServiceImpl implements DocumentService {
     public DocumentResponse uploadSingleFile(Room room, MultipartFile file, String description, String userEmail) {
         // Validate file
         if (file.isEmpty()) {
-            throw new RuntimeException("File is empty");
+            throw new AppException(ErrorCode.DOCUMENT_INVALID);
         }
-        
+
         String originalFileName = file.getOriginalFilename();
         if (originalFileName == null || originalFileName.isEmpty()) {
-            throw new RuntimeException("Invalid filename");
+            throw new AppException(ErrorCode.DOCUMENT_INVALID);
         }
         
         // Get file type
@@ -100,7 +103,7 @@ public class DocumentServiceImpl implements DocumentService {
         // Validate file size
         long fileSize = file.getSize();
         if (fileSize > MAX_FILE_SIZE) {
-            throw new RuntimeException("File size exceeds limit (max 50MB)");
+            throw new AppException(ErrorCode.DOCUMENT_INVALID);
         }
         
         // Generate unique filename
@@ -146,17 +149,18 @@ public class DocumentServiceImpl implements DocumentService {
     }
     
     @Override
-    public InputStream downloadDocument(String roomCode, Long documentId) {
+    public DocumentDownload downloadDocument(String roomCode, Long documentId) {
         // Validate room exists
         Room room = roomRepository.findByRoomCode(roomCode)
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
-        
+
         // Validate document exists in room
         Document document = documentRepository.findByIdAndRoomId(documentId, room.getId())
-                .orElseThrow(() -> new RuntimeException("Document not found in this room"));
-        
+                .orElseThrow(() -> new AppException(ErrorCode.DOCUMENT_NOT_FOUND));
+
         // Download from S3 using the stored file path
-        return s3Service.downloadFile(document.getFilePath());
+        InputStream stream = s3Service.downloadFile(document.getFilePath());
+        return new DocumentDownload(stream, document.getOriginalFileName(), document.getFileSize());
     }
     
     @Override
@@ -168,11 +172,11 @@ public class DocumentServiceImpl implements DocumentService {
         
         // 2. Validate document exists in room
         Document document = documentRepository.findByIdAndRoomId(documentId, room.getId())
-                .orElseThrow(() -> new RuntimeException("Document not found in this room"));
-        
+                .orElseThrow(() -> new AppException(ErrorCode.DOCUMENT_NOT_FOUND));
+
         // 3. Check if user is the uploader
         if (!document.getUploadedBy().equals(userEmail)) {
-            throw new RuntimeException("Only the document uploader can delete this file");
+            throw new AppException(ErrorCode.FORBIDDEN);
         }
         
         // 4. Delete from S3 using the stored file path
@@ -184,31 +188,73 @@ public class DocumentServiceImpl implements DocumentService {
         log.info("Document deleted: {} from room: {} by user: {}", document.getOriginalFileName(), roomCode, userEmail);
     }
     
+    // Text quá dài sẽ cắt bớt trước khi gửi Gemini để tránh vượt giới hạn context
+    private static final int MAX_SUMMARY_INPUT_CHARS = 30_000;
+
+    @Override
+    @Transactional
+    public DocumentResponse summarizeDocument(String roomCode, Long documentId, String userEmail, boolean force) {
+        Room room = roomRepository.findByRoomCode(roomCode)
+                .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
+
+        isParticipantOfRoom(room.getId(), userEmail);
+
+        Document document = documentRepository.findByIdAndRoomId(documentId, room.getId())
+                .orElseThrow(() -> new AppException(ErrorCode.DOCUMENT_NOT_FOUND));
+
+        // Đã có tóm tắt và không yêu cầu làm lại → trả cache
+        if (!force && document.getSummary() != null && !document.getSummary().isBlank()) {
+            return mapDocumentToResponse(document);
+        }
+
+        InputStream stream = s3Service.downloadFile(document.getFilePath());
+        String text = documentTextExtractor.extractText(stream, document.getFileType());
+
+        if (text == null || text.isBlank()) {
+            throw new AppException(ErrorCode.DOCUMENT_INVALID);
+        }
+        if (text.length() > MAX_SUMMARY_INPUT_CHARS) {
+            text = text.substring(0, MAX_SUMMARY_INPUT_CHARS);
+        }
+
+        String summary = geminiService.summarizeDocumentText(text);
+        if (summary == null || summary.isBlank()) {
+            // Gemini không khả dụng (thiếu API key / lỗi mạng) — báo lỗi rõ thay vì trả mock
+            throw new AppException(ErrorCode.INTERNAL_ERROR);
+        }
+
+        document.setSummary(summary);
+        documentRepository.save(document);
+
+        log.info("Generated AI summary for document {} in room {}", documentId, roomCode);
+        return mapDocumentToResponse(document);
+    }
+
     private void isParticipantOfRoom(Long roomId, String userEmail) {
         Optional<JoinRoom> participantJoinRoom = joinRoomRepository.findByRoomIdAndUser_Email(roomId, userEmail);
         if (participantJoinRoom.isEmpty()) {
-            throw new RuntimeException("User is not a participant of this room");
+            throw new AppException(ErrorCode.NOT_ROOM_PARTICIPANT);
         }
     }
-    
+
     private String getFileType(String filename) {
         int lastDot = filename.lastIndexOf(".");
         if (lastDot > 0) {
             return filename.substring(lastDot + 1).toLowerCase();
         }
-        throw new RuntimeException("Invalid file: no extension");
+        throw new AppException(ErrorCode.DOCUMENT_INVALID);
     }
-    
+
     private void validateFileType(String fileType) {
         if (!ALLOWED_FILE_TYPES.contains(fileType)) {
-            throw new RuntimeException("File type not allowed. Allowed types: " + ALLOWED_FILE_TYPES);
+            throw new AppException(ErrorCode.DOCUMENT_INVALID);
         }
     }
-    
+
     private String generateUniqueFileName(String originalFileName) {
+        // Tên gốc do user nhập có thể chứa ký tự lạ / unicode / ".." — không đưa vào S3 key
         String fileType = getFileType(originalFileName);
-        String fileName = originalFileName.substring(0, originalFileName.lastIndexOf("."));
-        return fileName + "_" + System.currentTimeMillis() + "." + fileType;
+        return UUID.randomUUID() + "." + fileType;
     }
     
     private DocumentResponse mapDocumentToResponse(Document doc) {
@@ -223,6 +269,7 @@ public class DocumentServiceImpl implements DocumentService {
                 .category(doc.getCategory())
                 .uploadedBy(doc.getUploadedBy())
                 .description(doc.getDescription())
+                .summary(doc.getSummary())
                 .fileUrl(fileUrl)
                 .createdAt(doc.getCreatedAt())
                 .updatedAt(doc.getUpdatedAt())

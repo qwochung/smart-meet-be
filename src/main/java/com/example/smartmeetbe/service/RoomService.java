@@ -14,7 +14,8 @@ public interface RoomService {
     RoomResponse createRoom(RoomRequest request, String hostEmail);
     RoomResponse getRoomByCode(String code);
     Room findByRoomCodeAndStatus(String code, RoomStatus roomStatus);
-    List<RoomMinuteResponse> getRoomMinutesForUser(String userEmail, String name, String date);
+    com.example.smartmeetbe.dto.response.PageResponse<RoomMinuteResponse> getRoomMinutesForUser(String userEmail, String name, String date, int page, int size);
     DashboardResponse getDashboard(String userEmail);
     List<RoomResponse> scheduleRecurringMeetings(ScheduleMeetingRequest request, String hostEmail);
+    void endRoom(String roomCode, String hostEmail);
 }

@@ -1,5 +1,6 @@
 package com.example.smartmeetbe.repository;
 
+import com.example.smartmeetbe.constant.JoinRoomStatus;
 import com.example.smartmeetbe.constant.Role;
 import com.example.smartmeetbe.entity.JoinRoom;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -14,5 +15,7 @@ public interface JoinRoomRepository extends JpaRepository<JoinRoom, Long> {
      Optional<JoinRoom> findByRoomIdAndUser_Email(Long roomId, String userEmail);
      
      Optional<JoinRoom> findByRoomIdAndUser_EmailAndRole(Long roomId, String userEmail, Role role);
+
+     long countByRoomIdAndStatus(Long roomId, JoinRoomStatus status);
 
 }
