@@ -44,7 +44,7 @@ app:
     secret: ${JWT_SECRET}
     expiration-ms: 90000000           # 15 minutes
     refresh-expiration-ms: 60480000000 # 7 days
-  client-url: http://localhost:5555
+  client-url: ${CLIENT_URL:http://localhost:5555}
 #  client-url: http://localhost:63342  => Nếu test bằng html thì tắt cái dòng có port 5555, mở dòng này ra
   room:
     max-participants: 10
@@ -72,7 +72,8 @@ livekit:
   host: ${LIVEKIT_URL}
 
 ai-server:
-  transcribe-url: http://localhost:8000/api/transcribe/chunk
+  transcribe-url: ${AI_SERVER_TRANSCRIBE_URL:http://localhost:8000/api/transcribe/chunk}
+  token: ${AI_SERVER_TOKEN:}
 
 gemini:
   api-key: ${GEMINI_API_KEY}
