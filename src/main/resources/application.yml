@@ -74,6 +74,9 @@ livekit:
 ai-server:
   transcribe-url: ${AI_SERVER_TRANSCRIBE_URL:http://localhost:8000/api/transcribe/chunk}
   token: ${AI_SERVER_TOKEN:}
+  # ASR dự phòng — khi server chính không kết nối được thì tự chuyển sang đây
+  fallback-url: ${AI_SERVER_FALLBACK_URL:}
+  fallback-token: ${AI_SERVER_FALLBACK_TOKEN:}
 
 gemini:
   api-key: ${GEMINI_API_KEY}
