@@ -18,6 +18,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
@@ -41,6 +42,14 @@ public class AudioProcessingServiceImpl implements AudioProcessingService {
 
     @Value("${ai-server.token:}")
     String transcribeToken;
+
+    // ASR dự phòng: khi server chính không kết nối được (chưa start / gateway chết) thì tự chuyển sang đây.
+    // Để trống -> không có fallback.
+    @Value("${ai-server.fallback-url:}")
+    String fallbackUrl;
+
+    @Value("${ai-server.fallback-token:}")
+    String fallbackToken;
 
     private static final int MAX_TRANSCRIBE_ATTEMPTS = 3;
 
@@ -96,13 +105,6 @@ public class AudioProcessingServiceImpl implements AudioProcessingService {
 
     @SuppressWarnings("unchecked")
     private String callTranscribeApi(byte[] audioBytes, Integer sampleRate, Integer channels) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
-        // Gateway ASR public (Syrix) yêu cầu Bearer token; local server thì để trống -> bỏ qua
-        if (transcribeToken != null && !transcribeToken.isBlank()) {
-            headers.setBearerAuth(transcribeToken);
-        }
-
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("audio_bytes", new ByteArrayResource(audioBytes) {
             @Override
@@ -113,10 +115,22 @@ public class AudioProcessingServiceImpl implements AudioProcessingService {
         if (sampleRate != null) body.add("sample_rate", sampleRate);
         if (channels != null) body.add("channels", channels);
 
-        HttpEntity<MultiValueMap<String, Object>> request = new HttpEntity<>(body, headers);
+        // Ưu tiên server ASR chính.
+        try {
+            return extractText(postWithRetry(transcribeUrl, transcribeToken, body));
+        } catch (ResourceAccessException | HttpServerErrorException primaryError) {
+            // Chính không kết nối được (chưa start) hoặc gateway lỗi 5xx -> thử server dự phòng nếu có.
+            if (fallbackUrl == null || fallbackUrl.isBlank()) {
+                throw primaryError;
+            }
+            log.warn("ASR chính [{}] lỗi ({}), chuyển sang ASR dự phòng [{}]",
+                    transcribeUrl, primaryError.getMessage(), fallbackUrl);
+            return extractText(postWithRetry(fallbackUrl, fallbackToken, body));
+        }
+    }
 
-        ResponseEntity<Map> response = postWithRetry(request);
-
+    @SuppressWarnings("rawtypes")
+    private String extractText(ResponseEntity<Map> response) {
         if (response.getBody() != null) {
             return (String) response.getBody().getOrDefault("text", "");
         }
@@ -124,15 +138,23 @@ public class AudioProcessingServiceImpl implements AudioProcessingService {
     }
 
     @SuppressWarnings("rawtypes")
-    private ResponseEntity<Map> postWithRetry(HttpEntity<MultiValueMap<String, Object>> request) {
+    private ResponseEntity<Map> postWithRetry(String url, String token, MultiValueMap<String, Object> body) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+        // Gateway ASR public (Syrix) yêu cầu Bearer token; local server thì để trống -> bỏ qua
+        if (token != null && !token.isBlank()) {
+            headers.setBearerAuth(token);
+        }
+        HttpEntity<MultiValueMap<String, Object>> request = new HttpEntity<>(body, headers);
+
         ResourceAccessException lastError = null;
         for (int attempt = 1; attempt <= MAX_TRANSCRIBE_ATTEMPTS; attempt++) {
             try {
-                return aiRestTemplate.postForEntity(transcribeUrl, request, Map.class);
+                return aiRestTemplate.postForEntity(url, request, Map.class);
             } catch (ResourceAccessException e) {
                 lastError = e;
-                log.warn("Transcribe request failed (attempt {}/{}), retrying with a fresh connection: {}",
-                        attempt, MAX_TRANSCRIBE_ATTEMPTS, e.getMessage());
+                log.warn("Transcribe request tới {} thất bại (lần {}/{}), thử lại: {}",
+                        url, attempt, MAX_TRANSCRIBE_ATTEMPTS, e.getMessage());
                 if (attempt < MAX_TRANSCRIBE_ATTEMPTS) {
                     try {
                         // Backoff tăng dần để không dồn thêm tải khi AI server đang quá tải
