@@ -12,8 +12,8 @@ RUN mvn -q -DskipTests clean package
 FROM eclipse-temurin:17-jre
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
-# Free tiers thường chỉ có 512MB RAM -> giới hạn heap để tránh OOM
-ENV JAVA_OPTS="-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
+# Render free chỉ 512MB RAM -> siết heap + metaspace + code cache để không OOM
+ENV JAVA_OPTS="-XX:MaxRAMPercentage=50 -XX:+UseSerialGC -XX:MaxMetaspaceSize=128m -XX:ReservedCodeCacheSize=48m -Xss512k -XX:+ExitOnOutOfMemoryError"
 EXPOSE 8080
 # Render/Railway/Koyeb tự inject biến PORT -> bind vào đó, fallback 8080 khi chạy local
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar --server.port=${PORT:-8080}"]

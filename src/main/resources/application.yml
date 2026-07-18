@@ -4,6 +4,9 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 3   # Render free RAM thấp -> ít kết nối cho nhẹ
+      minimum-idle: 1
 
   data:
     mongodb:
@@ -18,8 +21,9 @@ spring:
         enabled: false
 
   mail:
-    host: smtp.gmail.com
-    port: 587
+    # Render free chặn cổng SMTP 25/465/587 -> production dùng provider (Brevo/SendGrid) qua cổng 2525
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
     username: ${MAIL_USERNAME}
     password: ${MAIL_PASSWORD}
     properties:
@@ -30,6 +34,7 @@ spring:
             enable: true
 
   jpa:
+    open-in-view: false   # tránh giữ connection suốt request -> nhẹ RAM/pool
     hibernate:
       ddl-auto: update
     show-sql: false
@@ -101,3 +106,7 @@ logging:
 server:
   servlet:
     context-path: /api
+  tomcat:
+    threads:
+      max: 20        # mặc định 200 -> giảm để tiết kiệm RAM trên Render free
+      min-spare: 2

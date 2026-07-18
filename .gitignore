@@ -34,5 +34,7 @@ build/
 
 .env
 
-# Ghi chú deploy chứa secret thật — KHÔNG commit
+# Ghi chú / cấu hình deploy chứa secret thật — KHÔNG commit
 DEPLOY_BE.md
+env.yaml
+.env
