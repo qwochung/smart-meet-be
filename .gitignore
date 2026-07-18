@@ -33,3 +33,6 @@ build/
 .vscode/
 
 .env
+
+# Ghi chú deploy chứa secret thật — KHÔNG commit
+DEPLOY_BE.md
