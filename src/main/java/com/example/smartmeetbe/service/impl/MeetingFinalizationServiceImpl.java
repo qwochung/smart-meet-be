@@ -41,7 +41,13 @@ public class MeetingFinalizationServiceImpl implements MeetingFinalizationServic
     private final RoomRepository roomRepository;
     private final MeetingSummaryRepository meetingSummaryRepository;
     private final MeetingSummaryContext meetingSummaryContext;
+    private final AudioInFlightTracker inFlightTracker;
     private final ConcurrentHashMap<String, ReentrantLock> roomLocks = new ConcurrentHashMap<>();
+
+    // Đợi các chunk audio đang được ASR xử lý (bất đồng bộ) hoàn tất trước khi merge,
+    // để không finalize khi chunk cuối chưa dịch xong -> report thiếu dữ liệu.
+    private static final long DRAIN_MAX_WAIT_MS = 15_000;  // đợi tối đa 15s
+    private static final long DRAIN_POLL_MS = 100;         // kiểm tra mỗi 100ms
 
     @Async
     @Override
@@ -64,6 +70,9 @@ public class MeetingFinalizationServiceImpl implements MeetingFinalizationServic
                     : RoomTranscript.builder().roomId(roomId).build();
             doc.setStatus(MergeStatus.PROCESSING);
             roomTranscriptRepository.save(doc);
+
+            // Đợi mọi chunk audio đang được ASR xử lý xong (deterministic) trước khi merge.
+            inFlightTracker.awaitDrained(roomId, DRAIN_MAX_WAIT_MS, DRAIN_POLL_MS);
 
             List<TranscriptChunk> chunks =
                     transcriptChunkRepository.findByRoomIdOrderByStartTimeMsAscCreatedAtAsc(roomId);
@@ -126,6 +135,8 @@ public class MeetingFinalizationServiceImpl implements MeetingFinalizationServic
             lock.unlock();
             // Phòng đã finalize xong thì không giữ lock trong map nữa (tránh leak theo số phòng)
             roomLocks.remove(roomId, lock);
+            // Dọn counter in-flight của room (chunk tới muộn sẽ tự tạo lại entry nếu cần)
+            inFlightTracker.clear(roomId);
         }
     }
 
