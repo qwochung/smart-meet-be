@@ -39,6 +39,9 @@ public class AudioProcessingServiceImpl implements AudioProcessingService {
     @Value("${ai-server.transcribe-url:http://localhost:8000/api/transcribe/chunk}")
     String transcribeUrl;
 
+    @Value("${ai-server.token:}")
+    String transcribeToken;
+
     private static final int MAX_TRANSCRIBE_ATTEMPTS = 3;
 
     @Async
@@ -95,6 +98,10 @@ public class AudioProcessingServiceImpl implements AudioProcessingService {
     private String callTranscribeApi(byte[] audioBytes, Integer sampleRate, Integer channels) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+        // Gateway ASR public (Syrix) yêu cầu Bearer token; local server thì để trống -> bỏ qua
+        if (transcribeToken != null && !transcribeToken.isBlank()) {
+            headers.setBearerAuth(transcribeToken);
+        }
 
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("audio_bytes", new ByteArrayResource(audioBytes) {
