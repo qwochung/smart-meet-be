@@ -18,5 +18,6 @@ public class RoomResponse {
     String livekitToken;
     String livekitHost;
     String recurrenceRule;
-    com.example.smartmeetbe.constant.MeetingType typeCode;
+    String typeCode;
+    com.example.smartmeetbe.constant.MinutesFormat minutesFormat;
 }

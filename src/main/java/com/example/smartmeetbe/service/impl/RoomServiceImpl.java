@@ -3,7 +3,7 @@ package com.example.smartmeetbe.service.impl;
 import com.example.smartmeetbe.config.LiveKitConfig;
 import com.example.smartmeetbe.constant.ErrorCode;
 import com.example.smartmeetbe.constant.JoinRoomStatus;
-import com.example.smartmeetbe.constant.MeetingType;
+import com.example.smartmeetbe.constant.MinutesFormat;
 import com.example.smartmeetbe.constant.Role;
 import com.example.smartmeetbe.constant.RoomStatus;
 import com.example.smartmeetbe.dto.mapper.RoomMapper;
@@ -68,6 +68,7 @@ public class RoomServiceImpl implements RoomService {
     final MeetingSummaryRepository meetingSummaryRepository;
     final RoomTranscriptRepository roomTranscriptRepository;
     private final com.example.smartmeetbe.service.MeetingFinalizationService meetingFinalizationService;
+    private final com.example.smartmeetbe.service.MeetingTypeService meetingTypeService;
 
     @Value("${app.room.max-participants}")
     private int maxParticipants;
@@ -96,6 +97,7 @@ public class RoomServiceImpl implements RoomService {
 
         // 2. Tạo room trong DB — phòng hẹn giờ tính hết hạn từ scheduledAt, không phải từ lúc tạo
         LocalDateTime startBase = request.getScheduledAt() != null ? request.getScheduledAt() : LocalDateTime.now();
+        String typeCode = meetingTypeService.resolveTypeCodeForUser(hostEmail, request.getTypeCode());
         Room room = Room.builder()
                 .name(request.getName())
                 .description(request.getDescription())
@@ -106,7 +108,10 @@ public class RoomServiceImpl implements RoomService {
                 .roomCode(generateUniqueRoomCode())
                 .expiresAt(startBase.plusMinutes(durationMinutes))
                 .participants(new ArrayList<>(List.of(host)))
-                .typeCode(request.getTypeCode() != null ? request.getTypeCode() : MeetingType.GENERAL)
+                .typeCode(typeCode)
+                .minutesFormat(request.getMinutesFormat() != null
+                        ? request.getMinutesFormat()
+                        : meetingTypeService.resolveDefaultMinutesFormat(typeCode))
                 .build();
 
         roomRepository.save(room);
@@ -385,6 +390,10 @@ public class RoomServiceImpl implements RoomService {
 
         List<RoomResponse> created = new ArrayList<>();
         LocalDateTime firstStart = request.getScheduledAt();
+        String scheduledTypeCode = meetingTypeService.resolveTypeCodeForUser(hostEmail, request.getTypeCode());
+        MinutesFormat scheduledFormat = request.getMinutesFormat() != null
+                ? request.getMinutesFormat()
+                : meetingTypeService.resolveDefaultMinutesFormat(scheduledTypeCode);
 
         for (int i = 0; i < occurrences; i++) {
             LocalDateTime startAt = switch (recurrenceType) {
@@ -405,7 +414,8 @@ public class RoomServiceImpl implements RoomService {
                     .expiresAt(startAt.plusMinutes(durationMinutes))
                     .participants(new ArrayList<>(List.of(host)))
                     .recurrenceRule(occurrences > 1 ? recurrenceRule : null)
-                    .typeCode(request.getTypeCode() != null ? request.getTypeCode() : MeetingType.GENERAL)
+                    .typeCode(scheduledTypeCode)
+                    .minutesFormat(scheduledFormat)
                     .build();
 
             roomRepository.save(room);

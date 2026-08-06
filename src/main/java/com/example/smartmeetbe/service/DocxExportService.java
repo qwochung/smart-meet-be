@@ -1,5 +1,6 @@
 package com.example.smartmeetbe.service;
 
+import com.example.smartmeetbe.constant.MinutesFormat;
 import com.example.smartmeetbe.document.MeetingSummary;
 import com.example.smartmeetbe.dto.response.MasterMeetingSummaryDto;
 import lombok.extern.slf4j.Slf4j;
@@ -42,12 +43,30 @@ public class DocxExportService {
             }
 
             MeetingSummary summary = (MeetingSummary) data.get("summary");
-            if (summary != null) {
+            String verbatimText = stringOf(data.get("verbatimText"), "");
+            if (summary != null && summary.getMinutesFormat() == MinutesFormat.VERBATIM) {
+                writeVerbatim(document, verbatimText);
+            } else if (summary != null) {
                 writeSummary(document, summary);
             }
 
             document.write(out);
             return out.toByteArray();
+        }
+    }
+
+    /**
+     * Mẫu VERBATIM không có dữ liệu tóm tắt: xuất thẳng bản hội thoại, mỗi dòng một đoạn văn
+     * để giữ định dạng "[Tên]: Nội dung phát biểu".
+     */
+    private void writeVerbatim(XWPFDocument doc, String verbatimText) {
+        addHeading(doc, "Nội dung hội thoại (nguyên văn)");
+        if (verbatimText == null || verbatimText.isBlank()) {
+            doc.createParagraph().createRun().setText("Không có nội dung hội thoại được ghi lại cho cuộc họp này.");
+            return;
+        }
+        for (String line : verbatimText.split("\\R")) {
+            doc.createParagraph().createRun().setText(line);
         }
     }
 

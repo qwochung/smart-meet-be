@@ -15,7 +15,7 @@
 --     updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
 -- );
 -- 
--- -- 2. Seed dữ liệu 6 System Prompts mặc định
+-- -- 2. Seed dữ liệu 5 System Prompts mặc định
 -- -- Sử dụng dollar-quoted string $$ của PostgreSQL để tránh lỗi ký tự đặc biệt
 -- 
 -- -- Prompt 1: Họp Dự Án / Đồng Bộ (SCRUM_SYNC)
@@ -192,50 +192,10 @@
 --     json_schema = EXCLUDED.json_schema,
 --     updated_at = CURRENT_TIMESTAMP;
 -- 
--- -- Prompt 5: Phỏng Vấn / Đánh Giá (INTERVIEW)
--- INSERT INTO prompt_template (type_code, system_prompt, json_schema, is_active)
--- VALUES (
---     'INTERVIEW',
---     $$Bạn là một Chuyên gia Nhân sự (HRBP) chuyên nghiệp. Nhiệm vụ của bạn là tóm tắt cuộc họp phỏng vấn tuyển dụng hoặc đánh giá hiệu suất 1-1.
--- Hãy phân tích và điền vào cấu trúc Master JSON Schema theo các quy tắc sau:
--- 1. `executiveSummary`: Đánh giá hiệu suất chung (Performance Review) - những gì nhân viên/ứng viên đã làm tốt và chưa tốt trong kỳ qua.
--- 2. `discussionTopics`: Ghi nhận Phản hồi (Feedback) hai chiều từ phía Quản lý và Nhân viên về môi trường làm việc, khó khăn, đề xuất.
--- 3. `actionItems`: Thiết lập các Mục tiêu & Hành động tiếp theo (Goals & Next Actions) nhằm phát triển cá nhân trong quý tới.
---    - BẮT BUỘC định dạng trường `deadline` theo kiểu YYYY-MM-DD. Nếu không nhắc tới hạn cụ thể, bắt buộc trả về chuỗi rỗng "". Không dùng từ tương đối.
--- 4. Các trường còn lại (`decisionsMade`, `qaPairs`, `painPoints`, `prosAndCons`) BẮT BUỘC trả về mảng rỗng [] thay vì bỏ qua hay trả về null.$$,
---     $${
---   "type": "object",
---   "properties": {
---     "executiveSummary": { "type": "string" },
---     "discussionTopics": { "type": "array", "items": { "type": "string" } },
---     "decisionsMade": { "type": "array", "items": { "type": "string" } },
---     "actionItems": {
---       "type": "array",
---       "items": {
---         "type": "object",
---         "properties": {
---           "task": { "type": "string" },
---           "assignee": { "type": "string" },
---           "deadline": { "type": "string" }
---         },
---         "required": ["task", "assignee", "deadline"]
---       }
---     },
---     "qaPairs": { "type": "array", "items": { "type": "object" } },
---     "painPoints": { "type": "array", "items": { "type": "string" } },
---     "prosAndCons": { "type": "array", "items": { "type": "object" } }
---   },
---   "required": ["executiveSummary"]
--- }$$,
---     true
--- )
--- ON CONFLICT (type_code) 
--- DO UPDATE SET 
---     system_prompt = EXCLUDED.system_prompt,
---     json_schema = EXCLUDED.json_schema,
---     updated_at = CURRENT_TIMESTAMP;
--- 
--- -- Prompt 6: Tiêu Chuẩn / Cơ Bản (GENERAL)
+-- -- Loại INTERVIEW đã được gỡ khỏi hệ thống; nếu database còn dòng cũ hãy xoá:
+-- -- DELETE FROM prompt_template WHERE type_code = 'INTERVIEW';
+--
+-- -- Prompt 5: Tiêu Chuẩn / Cơ Bản (GENERAL)
 -- INSERT INTO prompt_template (type_code, system_prompt, json_schema, is_active)
 -- VALUES (
 --     'GENERAL',

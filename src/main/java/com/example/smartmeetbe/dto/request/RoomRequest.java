@@ -11,5 +11,9 @@ public class RoomRequest {
     String name;
     String description;
     LocalDateTime scheduledAt;
-    com.example.smartmeetbe.constant.MeetingType typeCode;
+    // Mã loại cuộc họp: tên enum dựng sẵn hoặc mã loại người dùng tự tạo
+    String typeCode;
+
+    // Mẫu biên bản; bỏ trống sẽ lấy gợi ý mặc định theo typeCode
+    com.example.smartmeetbe.constant.MinutesFormat minutesFormat;
 }

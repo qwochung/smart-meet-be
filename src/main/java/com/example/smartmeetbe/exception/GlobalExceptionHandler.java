@@ -42,6 +42,21 @@ public class GlobalExceptionHandler {
                         .build());
     }
 
+    /**
+     * Lỗi nghiệp vụ do dữ liệu người dùng gửi lên (vd: chưa chọn nội dung trích xuất,
+     * trùng tên loại cuộc họp). Không có handler riêng thì các lỗi này rơi vào handler
+     * Exception chung và trả về 500 kèm thông báo vô nghĩa với người dùng.
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiResponse<?>> handleIllegalArgument(IllegalArgumentException ex) {
+        return ResponseEntity.badRequest()
+                .body(ApiResponse.builder()
+                        .success(false)
+                        .message(ex.getMessage())
+                        .data(null)
+                        .build());
+    }
+
 
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<ApiResponse<?>> handleAuthException(AuthenticationException ex) {

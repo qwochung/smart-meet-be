@@ -2,6 +2,7 @@ package com.example.smartmeetbe.service.impl;
 
 import com.example.smartmeetbe.constant.MeetingType;
 import com.example.smartmeetbe.constant.MergeStatus;
+import com.example.smartmeetbe.constant.MinutesFormat;
 import com.example.smartmeetbe.document.MeetingSummary;
 import com.example.smartmeetbe.document.RoomTranscript;
 import com.example.smartmeetbe.document.TranscriptChunk;
@@ -95,30 +96,46 @@ public class MeetingFinalizationServiceImpl implements MeetingFinalizationServic
             try {
                 log.info("Generating dynamic AI summary for room {}...", roomId);
                 Room room = roomRepository.findByRoomCode(roomId).orElse(null);
-                MeetingType typeCode = (room != null && room.getTypeCode() != null) ? room.getTypeCode() : MeetingType.GENERAL;
+                String typeCode = (room != null && room.getTypeCode() != null)
+                        ? room.getTypeCode()
+                        : MeetingType.GENERAL.name();
+                MinutesFormat minutesFormat = (room != null && room.getMinutesFormat() != null)
+                        ? room.getMinutesFormat()
+                        : MinutesFormat.defaultFor(typeCode);
 
                 // Chốt thời điểm kết thúc thực tế để tính thời lượng cuộc họp
                 if (room != null && room.getActualEndedAt() == null) {
                     room.setActualEndedAt(LocalDateTime.now());
                     roomRepository.save(room);
                 }
-                
-                MeetingSummaryStrategy strategy = meetingSummaryContext.getStrategy(typeCode);
-                MasterMeetingSummaryDto summaryDto = strategy.generateSummary(roomId, result.fullText());
-                
-                MeetingSummary summaryDoc = meetingSummaryRepository.findByRoomId(roomId)
-                        .orElse(MeetingSummary.builder().roomId(roomId).build());
-                
-                summaryDoc.setExecutiveSummary(summaryDto.getExecutiveSummary());
-                summaryDoc.setDiscussionTopics(summaryDto.getDiscussionTopics());
-                summaryDoc.setDecisionsMade(summaryDto.getDecisionsMade());
-                summaryDoc.setActionItems(summaryDto.getActionItems());
-                summaryDoc.setQaPairs(summaryDto.getQaPairs());
-                summaryDoc.setPainPoints(summaryDto.getPainPoints());
-                summaryDoc.setProsAndCons(summaryDto.getProsAndCons());
-                
-                meetingSummaryRepository.save(summaryDoc);
-                log.info("Successfully generated and saved AI summary for room {} using strategy {}", roomId, typeCode);
+
+                // Verbatim minutes là "gần như nguyên văn" nên không đi qua bước tóm tắt AI:
+                // đưa qua Gemini để tóm tắt sẽ mâu thuẫn với chính định nghĩa của mẫu này.
+                if (minutesFormat == MinutesFormat.VERBATIM) {
+                    saveVerbatimMinutes(roomId, smoothed, result.fullText());
+                    log.info("Saved verbatim minutes for room {} (AI summary skipped by design)", roomId);
+                } else {
+                    MeetingSummaryStrategy strategy = meetingSummaryContext.getStrategy(typeCode);
+                    MasterMeetingSummaryDto summaryDto =
+                            strategy.generateSummary(roomId, typeCode, result.fullText(), minutesFormat);
+
+                    MeetingSummary summaryDoc = meetingSummaryRepository.findByRoomId(roomId)
+                            .orElse(MeetingSummary.builder().roomId(roomId).build());
+
+                    summaryDoc.setMinutesFormat(minutesFormat);
+                    summaryDoc.setVerbatimText(null);
+                    summaryDoc.setExecutiveSummary(summaryDto.getExecutiveSummary());
+                    summaryDoc.setDiscussionTopics(summaryDto.getDiscussionTopics());
+                    summaryDoc.setDecisionsMade(summaryDto.getDecisionsMade());
+                    summaryDoc.setActionItems(summaryDto.getActionItems());
+                    summaryDoc.setQaPairs(summaryDto.getQaPairs());
+                    summaryDoc.setPainPoints(summaryDto.getPainPoints());
+                    summaryDoc.setProsAndCons(summaryDto.getProsAndCons());
+
+                    meetingSummaryRepository.save(summaryDoc);
+                    log.info("Successfully generated and saved AI summary for room {} using strategy {} and format {}",
+                            roomId, typeCode, minutesFormat);
+                }
             } catch (Exception e) {
                 log.error("Failed to generate dynamic AI summary for room {}: {}", roomId, e.getMessage(), e);
             }
@@ -157,6 +174,32 @@ public class MeetingFinalizationServiceImpl implements MeetingFinalizationServic
                         .processedChunkCount(0)
                         .lastMergedAt(null)
                         .build());
+    }
+
+    /**
+     * Lưu biên bản mẫu VERBATIM: giữ nguyên bản transcript đã làm mượt thay vì tóm tắt.
+     * Các trường phân tích để rỗng vì mẫu này không sinh ra chúng.
+     *
+     * @param smoothedText bản đã hiệu đính bằng Gemini; rơi về bản thô nếu hiệu đính thất bại
+     */
+    private void saveVerbatimMinutes(String roomId, String smoothedText, String rawText) {
+        String verbatim = (smoothedText != null && !smoothedText.isBlank()) ? smoothedText : rawText;
+
+        MeetingSummary summaryDoc = meetingSummaryRepository.findByRoomId(roomId)
+                .orElse(MeetingSummary.builder().roomId(roomId).build());
+
+        summaryDoc.setMinutesFormat(MinutesFormat.VERBATIM);
+        summaryDoc.setVerbatimText(verbatim != null ? verbatim : "");
+        summaryDoc.setExecutiveSummary(
+                "Biên bản nguyên văn: nội dung cuộc họp được ghi lại gần như đầy đủ, không qua bước tóm tắt AI.");
+        summaryDoc.setDiscussionTopics(List.of());
+        summaryDoc.setDecisionsMade(List.of());
+        summaryDoc.setActionItems(List.of());
+        summaryDoc.setQaPairs(List.of());
+        summaryDoc.setPainPoints(List.of());
+        summaryDoc.setProsAndCons(List.of());
+
+        meetingSummaryRepository.save(summaryDoc);
     }
 
     private MergedTranscriptResponse toResponse(RoomTranscript doc) {
