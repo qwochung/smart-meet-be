@@ -1,5 +1,6 @@
 package com.example.smartmeetbe.service.impl;
 
+import com.example.smartmeetbe.constant.MinutesFormat;
 import com.example.smartmeetbe.document.MeetingSummary;
 import com.example.smartmeetbe.dto.response.MasterMeetingSummaryDto;
 import com.example.smartmeetbe.dto.response.MeetingSummaryDetailResponse;
@@ -27,6 +28,7 @@ public class MeetingSummaryServiceImpl implements MeetingSummaryService {
 
     private final RoomRepository roomRepository;
     private final MeetingSummaryRepository meetingSummaryRepository;
+    private final com.example.smartmeetbe.service.MeetingTypeService meetingTypeService;
 
     @Override
     @Transactional(readOnly = true)
@@ -52,6 +54,8 @@ public class MeetingSummaryServiceImpl implements MeetingSummaryService {
                 .attendees(attendees)
                 .attendeeCount(attendees.size())
                 .durationMinutes(computeDurationMinutes(room))
+                .minutesFormat(resolveFormat(room, summary))
+                .verbatimText(summary.getVerbatimText())
                 .summary(toDto(summary))
                 .build();
     }
@@ -77,6 +81,20 @@ public class MeetingSummaryServiceImpl implements MeetingSummaryService {
         MeetingSummary saved = meetingSummaryRepository.save(summary);
         log.info("Updated meeting summary for room {}", roomId);
         return toDto(saved);
+    }
+
+    /**
+     * Mẫu biên bản của bản ghi. Biên bản sinh trước khi có tính năng này chưa có {@code minutesFormat},
+     * khi đó lấy theo cấu hình của phòng rồi mới tới mặc định theo loại cuộc họp.
+     */
+    private MinutesFormat resolveFormat(Room room, MeetingSummary summary) {
+        if (summary.getMinutesFormat() != null) {
+            return summary.getMinutesFormat();
+        }
+        if (room.getMinutesFormat() != null) {
+            return room.getMinutesFormat();
+        }
+        return meetingTypeService.resolveDefaultMinutesFormat(room.getTypeCode());
     }
 
     private Long computeDurationMinutes(Room room) {

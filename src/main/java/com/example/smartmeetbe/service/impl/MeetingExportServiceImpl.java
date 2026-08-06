@@ -1,5 +1,6 @@
 package com.example.smartmeetbe.service.impl;
 
+import com.example.smartmeetbe.constant.MinutesFormat;
 import com.example.smartmeetbe.document.MeetingSummary;
 import com.example.smartmeetbe.entity.Room;
 import com.example.smartmeetbe.entity.User;
@@ -33,8 +34,9 @@ public class MeetingExportServiceImpl implements MeetingExportService {
     @Override
     public byte[] exportSummaryPdf(String roomId) throws Exception {
         Room room = loadRoom(roomId);
-        Map<String, Object> templateData = buildTemplateData(room, loadSummary(roomId));
-        String templateName = resolveTemplateName(room);
+        MeetingSummary summary = loadSummary(roomId);
+        Map<String, Object> templateData = buildTemplateData(room, summary);
+        String templateName = resolveTemplateName(room, summary);
 
         log.info("Generating PDF report in Service for room {} using template type {}", roomId, templateName);
         return pdfExportService.generateMeetingPdf(templateName, templateData);
@@ -80,12 +82,24 @@ public class MeetingExportServiceImpl implements MeetingExportService {
         templateData.put("attendees", attendees);
 
         templateData.put("summary", summary);
+
+        // Verbatim minutes không có dữ liệu tóm tắt; template và DOCX đọc trực tiếp phần nguyên văn
+        templateData.put("verbatimText", summary.getVerbatimText() != null ? summary.getVerbatimText() : "");
         return templateData;
     }
 
-    /** Chọn template PDF tương ứng dựa trên typeCode của phòng họp. */
-    private String resolveTemplateName(Room room) {
-        String meetingType = (room.getTypeCode() != null) ? room.getTypeCode().name() : "GENERAL";
+    /**
+     * Chọn template PDF: mẫu biên bản VERBATIM có bố cục riêng (bản ghi nguyên văn),
+     * các mẫu còn lại vẫn chọn theo typeCode của phòng họp.
+     */
+    private String resolveTemplateName(Room room, MeetingSummary summary) {
+        MinutesFormat format = (summary.getMinutesFormat() != null) ? summary.getMinutesFormat() : room.getMinutesFormat();
+        if (format == MinutesFormat.VERBATIM) {
+            return "verbatim";
+        }
+
+        // Loại do người dùng tự tạo không có template riêng nên dùng bố cục chung
+        String meetingType = (room.getTypeCode() != null) ? room.getTypeCode() : "GENERAL";
         switch (meetingType) {
             case "SCRUM_SYNC":
                 return "scrum";
@@ -95,8 +109,6 @@ public class MeetingExportServiceImpl implements MeetingExportService {
                 return "brainstorming";
             case "WEBINAR":
                 return "webinar";
-            case "INTERVIEW":
-                return "interview";
             default:
                 return "general";
         }

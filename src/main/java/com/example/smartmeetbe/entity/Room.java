@@ -1,6 +1,6 @@
 package com.example.smartmeetbe.entity;
 
-import com.example.smartmeetbe.constant.MeetingType;
+import com.example.smartmeetbe.constant.MinutesFormat;
 import com.example.smartmeetbe.constant.RoomStatus;
 import jakarta.persistence.*;
 import lombok.*;
@@ -64,7 +64,13 @@ public class Room extends BaseEntity {
     @Column(name = "recurrence_rule")
     String recurrenceRule;
 
-    @Enumerated(EnumType.STRING)
+    // Mã loại cuộc họp: tên enum MeetingType (loại dựng sẵn) hoặc mã của loại người dùng tự tạo.
+    // Trước đây là enum, cột vẫn là VARCHAR(50) nên dữ liệu cũ tương thích nguyên vẹn.
     @Column(name = "type_code", length = 50)
-    MeetingType typeCode;
+    String typeCode;
+
+    // Mẫu biên bản (mức độ chi tiết) áp dụng khi sinh biên bản cho phòng này
+    @Enumerated(EnumType.STRING)
+    @Column(name = "minutes_format", length = 50)
+    MinutesFormat minutesFormat;
 }

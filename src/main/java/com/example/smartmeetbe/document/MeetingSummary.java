@@ -1,5 +1,6 @@
 package com.example.smartmeetbe.document;
 
+import com.example.smartmeetbe.constant.MinutesFormat;
 import com.example.smartmeetbe.dto.response.MasterMeetingSummaryDto;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -24,6 +25,12 @@ public class MeetingSummary extends MongoAuditable {
 
     @Indexed(unique = true)
     private String roomId;
+
+    /** Mẫu biên bản đã dùng để sinh nội dung này (ACTION / DISCUSSION / VERBATIM). */
+    private MinutesFormat minutesFormat;
+
+    /** Chỉ có giá trị với mẫu VERBATIM: bản transcript đã làm mượt, gần như nguyên văn. */
+    private String verbatimText;
 
     private String executiveSummary;
     private List<String> discussionTopics;
