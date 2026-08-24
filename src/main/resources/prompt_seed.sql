@@ -20,52 +20,52 @@
 -- 
     
 -- Prompt 1: Họp Dự Án / Đồng Bộ (SCRUM_SYNC)
-INSERT INTO prompt_template (type_code, system_prompt, json_schema, is_active)
-VALUES (
-    'SCRUM_SYNC',
-    $$Bạn là một Scrum Master chuyên nghiệp. Nhiệm vụ của bạn là phân tích đoạn hội thoại cuộc họp (transcript) thô và tạo bản tóm tắt chuẩn Agile/Scrum.
-Hãy phân tích và điền vào cấu trúc Master JSON Schema theo các quy tắc sau:
-1. `executiveSummary`: Tóm tắt ngắn gọn (2-3 câu) về tiến độ chung của Sprint và mục tiêu đạt được trong buổi họp.
-2. `discussionTopics`: Phân chia rõ ràng thành 2 nhóm nội dung:
-   - "Tiến độ (What's done): [Tên người] đã hoàn thành [nhiệm vụ]"
-   - "Kế hoạch (What's next): [Tên người] dự kiến làm [nhiệm vụ]"
-3. `painPoints`: Trích xuất toàn bộ các Rào cản/Khó khăn (Blockers/Impediments) mà các thành viên đang gặp phải làm cản trở tiến độ.
-4. `actionItems`: Trích xuất các đầu việc phát sinh cụ thể.
-   - BẮT BUỘC định dạng trường `deadline` theo kiểu YYYY-MM-DD. Nếu không nhắc tới hạn cụ thể, bắt buộc trả về chuỗi rỗng "". Không được tự bịa ngày hoặc dùng từ tương đối.
-5. Các trường còn lại (`decisionsMade`, `qaPairs`, `prosAndCons`) BẮT BUỘC trả về mảng rỗng [] thay vì bỏ qua hay trả về null.$$,
-    $${
-  "type": "object",
-  "properties": {
-    "executiveSummary": { "type": "string" },
-    "discussionTopics": { "type": "array", "items": { "type": "string" } },
-    "decisionsMade": { "type": "array", "items": { "type": "string" } },
-    "actionItems": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "task": { "type": "string" },
-          "assignee": { "type": "string" },
-          "deadline": { "type": "string" }
-        },
-        "required": ["task", "assignee", "deadline"]
-      }
-    },
-    "qaPairs": { "type": "array", "items": { "type": "object" } },
-    "painPoints": { "type": "array", "items": { "type": "string" } },
-    "prosAndCons": { "type": "array", "items": { "type": "object" } }
-  },
-  "required": ["executiveSummary"]
-}$$,
-    true
-)
-ON CONFLICT (type_code) 
-DO UPDATE SET 
-    system_prompt = EXCLUDED.system_prompt,
-    json_schema = EXCLUDED.json_schema,
-    updated_at = CURRENT_TIMESTAMP;
-
-
+-- INSERT INTO prompt_template (type_code, system_prompt, json_schema, is_active)
+-- VALUES (
+--     'SCRUM_SYNC',
+--     $$Bạn là một Scrum Master chuyên nghiệp. Nhiệm vụ của bạn là phân tích đoạn hội thoại cuộc họp (transcript) thô và tạo bản tóm tắt chuẩn Agile/Scrum.
+-- Hãy phân tích và điền vào cấu trúc Master JSON Schema theo các quy tắc sau:
+-- 1. `executiveSummary`: Tóm tắt ngắn gọn (2-3 câu) về tiến độ chung của Sprint và mục tiêu đạt được trong buổi họp.
+-- 2. `discussionTopics`: Phân chia rõ ràng thành 2 nhóm nội dung:
+--    - "Tiến độ (What's done): [Tên người] đã hoàn thành [nhiệm vụ]"
+--    - "Kế hoạch (What's next): [Tên người] dự kiến làm [nhiệm vụ]"
+-- 3. `painPoints`: Trích xuất toàn bộ các Rào cản/Khó khăn (Blockers/Impediments) mà các thành viên đang gặp phải làm cản trở tiến độ.
+-- 4. `actionItems`: Trích xuất các đầu việc phát sinh cụ thể.
+--    - BẮT BUỘC định dạng trường `deadline` theo kiểu YYYY-MM-DD. Nếu không nhắc tới hạn cụ thể, bắt buộc trả về chuỗi rỗng "". Không được tự bịa ngày hoặc dùng từ tương đối.
+-- 5. Các trường còn lại (`decisionsMade`, `qaPairs`, `prosAndCons`) BẮT BUỘC trả về mảng rỗng [] thay vì bỏ qua hay trả về null.$$,
+--     $${
+--   "type": "object",
+--   "properties": {
+--     "executiveSummary": { "type": "string" },
+--     "discussionTopics": { "type": "array", "items": { "type": "string" } },
+--     "decisionsMade": { "type": "array", "items": { "type": "string" } },
+--     "actionItems": {
+--       "type": "array",
+--       "items": {
+--         "type": "object",
+--         "properties": {
+--           "task": { "type": "string" },
+--           "assignee": { "type": "string" },
+--           "deadline": { "type": "string" }
+--         },
+--         "required": ["task", "assignee", "deadline"]
+--       }
+--     },
+--     "qaPairs": { "type": "array", "items": { "type": "object" } },
+--     "painPoints": { "type": "array", "items": { "type": "string" } },
+--     "prosAndCons": { "type": "array", "items": { "type": "object" } }
+--   },
+--   "required": ["executiveSummary"]
+-- }$$,
+--     true
+-- )
+-- ON CONFLICT (type_code) 
+-- DO UPDATE SET 
+--     system_prompt = EXCLUDED.system_prompt,
+--     json_schema = EXCLUDED.json_schema,
+--     updated_at = CURRENT_TIMESTAMP;
+-- 
+-- 
 
 -- -- Prompt 2: Gặp Khách Hàng (CLIENT_SALES)
 -- INSERT INTO prompt_template (type_code, system_prompt, json_schema, is_active)
