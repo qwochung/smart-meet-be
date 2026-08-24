@@ -24,6 +24,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
@@ -116,8 +117,8 @@ public class MeetingFinalizationServiceImpl implements MeetingFinalizationServic
                     log.info("Saved verbatim minutes for room {} (AI summary skipped by design)", roomId);
                 } else {
                     MeetingSummaryStrategy strategy = meetingSummaryContext.getStrategy(typeCode);
-                    MasterMeetingSummaryDto summaryDto =
-                            strategy.generateSummary(roomId, typeCode, result.fullText(), minutesFormat);
+                    MasterMeetingSummaryDto summaryDto = strategy.generateSummary(
+                            roomId, typeCode, result.fullText(), minutesFormat, resolveMeetingDate(room));
 
                     MeetingSummary summaryDoc = meetingSummaryRepository.findByRoomId(roomId)
                             .orElse(MeetingSummary.builder().roomId(roomId).build());
@@ -174,6 +175,22 @@ public class MeetingFinalizationServiceImpl implements MeetingFinalizationServic
                         .processedChunkCount(0)
                         .lastMergedAt(null)
                         .build());
+    }
+
+    /**
+     * Ngày họp dùng làm mốc quy đổi các hạn tương đối sang ngày tuyệt đối.
+     * Ưu tiên thời điểm bắt đầu thực tế, sau đó tới ngày hiển thị trên biên bản
+     * ({@code scheduledAt} rồi {@code createdAt}); rơi về hôm nay vì bước finalize
+     * chạy ngay khi cuộc họp vừa kết thúc.
+     */
+    private LocalDate resolveMeetingDate(Room room) {
+        if (room == null) {
+            return LocalDate.now();
+        }
+        LocalDateTime base = room.getActualStartedAt() != null ? room.getActualStartedAt()
+                : room.getScheduledAt() != null ? room.getScheduledAt()
+                : room.getCreatedAt();
+        return base != null ? base.toLocalDate() : LocalDate.now();
     }
 
     /**

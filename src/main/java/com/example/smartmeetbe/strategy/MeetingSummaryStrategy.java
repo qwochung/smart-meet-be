@@ -3,6 +3,8 @@ package com.example.smartmeetbe.strategy;
 import com.example.smartmeetbe.constant.MinutesFormat;
 import com.example.smartmeetbe.dto.response.MasterMeetingSummaryDto;
 
+import java.time.LocalDate;
+
 public interface MeetingSummaryStrategy {
 
     /**
@@ -19,7 +21,10 @@ public interface MeetingSummaryStrategy {
      * @param typeCode      mã loại cuộc họp của phòng; cần cho strategy tùy chỉnh vì một
      *                      strategy phục vụ nhiều mã khác nhau
      * @param minutesFormat mức độ chi tiết; null sẽ rơi về mặc định theo loại cuộc họp
+     * @param meetingDate   ngày diễn ra cuộc họp, dùng làm mốc quy đổi các hạn tương đối
+     *                      ("thứ Tư", "tuần sau") thành ngày tuyệt đối
      */
     MasterMeetingSummaryDto generateSummary(String roomId, String typeCode,
-                                            String fullRawTranscript, MinutesFormat minutesFormat);
+                                            String fullRawTranscript, MinutesFormat minutesFormat,
+                                            LocalDate meetingDate);
 }
