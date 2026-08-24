@@ -43,6 +43,10 @@ spring:
         jdbc:
           time_zone: Asia/Ho_Chi_Minh
         format_sql: false
+  servlet:
+    multipart:
+      max-file-size: 50MB      # match app.storage.max-file-size-mb
+      max-request-size: 55MB   # headroom for multiple files + form fields
 
 app:
   jwt:
